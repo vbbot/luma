@@ -12,6 +12,7 @@ import androidx.navigation.fragment.findNavController
 import com.vandam.luma.MainActivity
 import com.vandam.luma.R
 import com.vandam.luma.data.Prefs
+import com.vandam.luma.data.ServerConfig
 import com.vandam.luma.ui.compose.SelectorButton
 import com.vandam.luma.ui.compose.SettingsScreen
 import com.vandam.luma.ui.compose.SimpleTextButton
@@ -61,6 +62,12 @@ class AccountFragment : Fragment() {
             SelectorButton(
                 label = stringResource(R.string.account_number_label),
                 value = formatAccountNumber(prefs.accountNumber),
+                enabled = false,
+                onClick = {},
+            )
+            SelectorButton(
+                label = stringResource(R.string.server_label),
+                value = ServerConfig.customUrl(requireContext()).ifBlank { stringResource(R.string.server_default) },
                 enabled = false,
                 onClick = {},
             )

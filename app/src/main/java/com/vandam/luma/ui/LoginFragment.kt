@@ -43,11 +43,13 @@ import androidx.navigation.fragment.findNavController
 import com.vandam.luma.MainActivity
 import com.vandam.luma.R
 import com.vandam.luma.data.Prefs
+import com.vandam.luma.data.ServerConfig
 import com.vandam.luma.data.ToolSyncManager
 import com.vandam.luma.data.ToolSyncResult
 import com.vandam.luma.helper.performAppTapHapticFeedback
 import com.vandam.luma.style.SettingsTheme
 import com.vandam.luma.ui.compose.MessageText
+import com.vandam.luma.ui.compose.SelectorButton
 import com.vandam.luma.ui.compose.SettingsFormSpacing
 import com.vandam.luma.ui.compose.SettingsInsetContentPadding
 import com.vandam.luma.ui.compose.SettingsScreen
@@ -174,7 +176,15 @@ class LoginFragment : Fragment() {
             contentPadding = SettingsInsetContentPadding,
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.Top,
         ) {
-            MessageText(text = stringResource(R.string.login_message))
+            val customServerUrl = ServerConfig.customUrl(context)
+            MessageText(
+                text =
+                    if (customServerUrl.isBlank()) {
+                        stringResource(R.string.login_message)
+                    } else {
+                        stringResource(R.string.login_message_custom_server)
+                    },
+            )
             Spacer(modifier = Modifier.height(SettingsFormSpacing))
             Row(
                 modifier =
@@ -246,6 +256,14 @@ class LoginFragment : Fragment() {
                 Spacer(modifier = Modifier.height(SettingsSupportingTextSpacing))
                 MessageText(text = error)
             }
+
+            Spacer(modifier = Modifier.height(SettingsFormSpacing))
+            SelectorButton(
+                label = stringResource(R.string.server_label),
+                value = customServerUrl.ifBlank { stringResource(R.string.server_default) },
+                enabled = !isSubmitting.value,
+                onClick = { findNavController().navigate(R.id.serverFragment) },
+            )
         }
     }
 }

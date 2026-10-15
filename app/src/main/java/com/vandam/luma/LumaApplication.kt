@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.pm.LauncherApps
 import android.os.UserHandle
 import android.util.Log
+import com.vandam.luma.data.ServerConfig
 import com.vandam.luma.helper.HomeCleanupHelper
 import com.vandam.luma.helper.ManagedAppManager
 import dev.convex.android.ConvexClient
@@ -30,14 +31,7 @@ class LumaApplication : Application() {
     }
 
     internal fun createConvexClient(): ConvexClient? {
-        val deploymentUrl = BuildConfig.CONVEX_URL.trim().removeSuffix("/")
-        if (deploymentUrl.isBlank()) {
-            return null
-        }
-        if (!BuildConfig.DEBUG && !deploymentUrl.startsWith("https://")) {
-            return null
-        }
-
+        val deploymentUrl = ServerConfig.resolveUrl(this) ?: return null
         return ConvexClient(deploymentUrl)
     }
 

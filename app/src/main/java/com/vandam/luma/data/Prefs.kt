@@ -16,6 +16,7 @@ private const val FIRST_RUN_DEFAULTS = "FIRST_RUN_DEFAULTS"
 private const val LEGACY_ACCOUNT_NUMBER = "ACCOUNT_NUMBER"
 private const val ONBOARDING_STARTED = "ONBOARDING_STARTED"
 private const val ONBOARDING_LOGIN_STARTED = "ONBOARDING_LOGIN_STARTED"
+private const val CUSTOM_SERVER_URL = "CUSTOM_SERVER_URL"
 private const val ENABLED_MANAGED_APP_IDS = "ENABLED_MANAGED_APP_IDS"
 private const val ENABLED_ANDROID_APPS = "ENABLED_ANDROID_APPS"
 private const val HOME_ITEM_ORDER = "HOME_ITEM_ORDER"
@@ -173,6 +174,10 @@ class Prefs(
     var onboardingLoginStarted: Boolean
         get() = prefs.getBoolean(ONBOARDING_LOGIN_STARTED, false)
         set(value) = prefs.edit().putBoolean(ONBOARDING_LOGIN_STARTED, value).apply()
+
+    var customServerUrl: String
+        get() = prefs.getString(CUSTOM_SERVER_URL, "").orEmpty()
+        set(value) = prefs.edit().putString(CUSTOM_SERVER_URL, value).apply()
 
     var enabledManagedAppIds: Set<String>
         get() = prefs.getStringSet(ENABLED_MANAGED_APP_IDS, emptySet()) ?: emptySet()

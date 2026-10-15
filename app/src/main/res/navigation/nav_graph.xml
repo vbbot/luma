@@ -29,6 +29,11 @@
         android:label="LoginFragment" />
 
     <fragment
+        android:id="@+id/serverFragment"
+        android:name="com.vandam.luma.ui.ServerFragment"
+        android:label="ServerFragment" />
+
+    <fragment
         android:id="@+id/mainFragment"
         android:name="com.vandam.luma.ui.HomeFragment"
         android:label="main_fragment"

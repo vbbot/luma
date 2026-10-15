@@ -48,7 +48,7 @@ object ToolSyncManager {
 
         val client =
             (context.applicationContext as? LumaApplication)?.convexClient
-                ?: return ToolSyncResult.Failure("Convex URL not configured")
+                ?: return ToolSyncResult.Failure("Server not configured")
 
         val installationId = Prefs.getInstance(context).installationId
 
@@ -86,7 +86,7 @@ object ToolSyncManager {
 
         val client =
             (context.applicationContext as? LumaApplication)?.convexClient
-                ?: return flowOf(ToolSyncResult.Failure("Convex URL not configured"))
+                ?: return flowOf(ToolSyncResult.Failure("Server not configured"))
 
         return runCatching {
             client

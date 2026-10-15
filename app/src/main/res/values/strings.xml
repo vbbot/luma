@@ -169,6 +169,13 @@
     <string name="login_error_account_number">Enter a 16-digit account number.</string>
     <string name="login_error_invalid_account">That account number was not found.</string>
     <string name="login_error_sync_failed">Unable to sync tools.</string>
+    <string name="login_message_custom_server">Please enter your account number below.</string>
+    <string name="server_title">Server</string>
+    <string name="server_label">Server</string>
+    <string name="server_default">Default</string>
+    <string name="server_not_configured">Not configured</string>
+    <string name="server_message">Enter the URL of your Luma dashboard server. Leave blank to use the default.</string>
+    <string name="server_error_invalid_url">Enter a valid http:// or https:// URL.</string>
     <string name="account_title">Account</string>
     <string name="account_number_label">Account Number</string>
     <string name="account_log_out">Log Out</string>

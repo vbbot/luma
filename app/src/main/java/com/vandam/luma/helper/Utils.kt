@@ -304,6 +304,8 @@ fun uninstallApp(
 ) {
     val intent = Intent(Intent.ACTION_DELETE)
     intent.data = Uri.parse("package:$appPackage")
+    // Called with the application context when the dashboard removes an app.
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     context.startActivity(intent)
 }
 

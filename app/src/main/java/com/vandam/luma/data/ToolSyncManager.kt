@@ -36,6 +36,8 @@ object ToolSyncManager {
         val enabledAppIds: List<String> = emptyList(),
         val enabledToolIds: List<String> = emptyList(),
         val requestedAppUpdateVersions: Map<String, String> = emptyMap(),
+        // App Store apps beyond the built-in catalog; absent on older servers.
+        val managedApps: List<RemoteManagedApp> = emptyList(),
     )
 
     suspend fun syncAndApply(
@@ -66,6 +68,7 @@ object ToolSyncManager {
                 if (payload == null) {
                     ToolSyncResult.InvalidAccount
                 } else {
+                    ManagedAppCatalog.updateRemote(context, payload.managedApps)
                     applyNormalizedResult(context, normalizePayload(payload))
                 }
             },
@@ -99,6 +102,7 @@ object ToolSyncManager {
                             if (payload == null) {
                                 ToolSyncResult.InvalidAccount
                             } else {
+                                ManagedAppCatalog.updateRemote(context, payload.managedApps)
                                 normalizePayload(payload)
                             }
                         },

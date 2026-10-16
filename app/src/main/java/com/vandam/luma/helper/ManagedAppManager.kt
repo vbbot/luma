@@ -29,6 +29,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 object ManagedAppManager {
     private const val LOG_TAG = "ManagedAppManager"
@@ -442,7 +443,10 @@ object ManagedAppManager {
             return
         }
 
-        val expectedVersion = normalizeVersion(latestRelease.versionName)
+        // A release tag need not match the APK's versionName, so only built-in
+        // apps (whose tags do) are checked against it.
+        val expectedVersion =
+            if (managedApp.apkUrl == null) normalizeVersion(latestRelease.versionName) else null
 
         val apkFile =
             withContext(Dispatchers.IO) {
@@ -645,6 +649,14 @@ object ManagedAppManager {
         managedApp: ManagedApp,
         requestedVersionName: String? = null,
     ): ReleaseAsset? {
+        // App Store apps come with the exact APK to install.
+        if (managedApp.apkUrl != null) {
+            return ReleaseAsset(
+                versionName = managedApp.versionName ?: "latest",
+                downloadUrl = managedApp.apkUrl,
+                fileName = managedApp.apkUrl.substringAfterLast('/'),
+            )
+        }
         val normalizedRequestedVersionName = normalizeVersion(requestedVersionName)
         val candidateUrls =
             if (normalizedRequestedVersionName == null) {
@@ -726,7 +738,8 @@ object ManagedAppManager {
     ): File? {
         val cacheDir = File(context.cacheDir, "managed-apps").apply { mkdirs() }
         val normalizedVersion = normalizeVersion(releaseAsset.versionName) ?: "latest"
-        val destinationFile = File(cacheDir, "${managedApp.id}-$normalizedVersion.apk")
+        val fileKey = managedApp.id.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val destinationFile = File(cacheDir, "$fileKey-${normalizedVersion.replace(Regex("[^A-Za-z0-9._-]"), "_")}.apk")
         if (
             ApkInstaller.isValidCachedApk(
                 context = context,
@@ -740,7 +753,7 @@ object ManagedAppManager {
             destinationFile.delete()
         }
 
-        val tempFile = File(cacheDir, "${managedApp.id}.download")
+        val tempFile = File(cacheDir, "$fileKey.download")
         val connection =
             (URL(releaseAsset.downloadUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
@@ -759,6 +772,12 @@ object ManagedAppManager {
                         input.copyTo(output)
                     }
                 }
+                val expectedSha256 = managedApp.sha256?.lowercase()
+                if (expectedSha256 != null && sha256Of(tempFile) != expectedSha256) {
+                    Log.w(LOG_TAG, "Checksum mismatch for ${managedApp.id}")
+                    tempFile.delete()
+                    return null
+                }
                 if (destinationFile.exists()) {
                     destinationFile.delete()
                 }
@@ -766,7 +785,12 @@ object ManagedAppManager {
                     tempFile.copyTo(destinationFile, overwrite = true)
                     tempFile.delete()
                 }
-                destinationFile.takeIf { it.exists() && it.length() > 0 }
+                if (!ApkInstaller.isValidCachedApk(context, destinationFile, managedApp.packageName)) {
+                    Log.w(LOG_TAG, "Downloaded APK for ${managedApp.id} is not ${managedApp.packageName}")
+                    destinationFile.delete()
+                    return null
+                }
+                destinationFile
             }
         } catch (_: Exception) {
             null
@@ -776,6 +800,19 @@ object ManagedAppManager {
                 tempFile.delete()
             }
         }
+    }
+
+    private fun sha256Of(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private sealed interface PendingAction {

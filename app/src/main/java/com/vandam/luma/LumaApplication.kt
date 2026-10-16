@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.pm.LauncherApps
 import android.os.UserHandle
 import android.util.Log
+import com.vandam.luma.data.ManagedAppCatalog
 import com.vandam.luma.data.ServerConfig
 import com.vandam.luma.helper.HomeCleanupHelper
 import com.vandam.luma.helper.ManagedAppManager
@@ -115,6 +116,7 @@ class LumaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        ManagedAppCatalog.init(this)
         getSystemService(LauncherApps::class.java).registerCallback(launcherAppsCallback)
     }
 

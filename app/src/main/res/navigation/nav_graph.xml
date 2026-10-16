@@ -6,8 +6,36 @@
     app:startDestination="@id/mainFragment">
 
     <fragment
+        android:id="@+id/onboardingWelcomeFragment"
+        android:name="com.vandam.luma.ui.OnboardingWelcomeFragment"
+        android:label="OnboardingWelcomeFragment">
+        <action
+            android:id="@+id/action_onboardingWelcomeFragment_to_onboardingPermissionsFragment"
+            app:destination="@id/onboardingPermissionsFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/onboardingPermissionsFragment"
+        android:name="com.vandam.luma.ui.OnboardingPermissionsFragment"
+        android:label="OnboardingPermissionsFragment">
+        <action
+            android:id="@+id/action_onboardingPermissionsFragment_to_loginFragment"
+            app:destination="@id/loginFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/loginFragment"
+        android:name="com.vandam.luma.ui.LoginFragment"
+        android:label="LoginFragment" />
+
+    <fragment
+        android:id="@+id/serverFragment"
+        android:name="com.vandam.luma.ui.ServerFragment"
+        android:label="ServerFragment" />
+
+    <fragment
         android:id="@+id/mainFragment"
-        android:name="app.luma.ui.HomeFragment"
+        android:name="com.vandam.luma.ui.HomeFragment"
         android:label="main_fragment"
         tools:layout="@layout/fragment_home">
         <action
@@ -19,226 +47,193 @@
     </fragment>
 
     <fragment
-        android:id="@+id/appListFragment"
-        android:name="app.luma.ui.AppDrawerFragment"
-        android:label="app_list_fragment"
-        tools:layout="@layout/fragment_app_drawer">
-    </fragment>
-
-<fragment
-        android:id="@+id/renameFragment"
-        android:name="app.luma.ui.RenameFragment"
-        android:label="RenameFragment">
-        <argument
-            android:name="appPackage"
-            app:argType="string" />
-        <argument
-            android:name="appLabel"
-            app:argType="string" />
-        <argument
-            android:name="appAlias"
-            app:argType="string"
-            android:defaultValue="" />
-        <argument
-            android:name="homePosition"
-            app:argType="integer"
-            android:defaultValue="-1" />
-    </fragment>
-    <fragment
-        android:id="@+id/pagesFragment"
-        android:name="app.luma.ui.PagesFragment"
-        android:label="PagesFragment">
-        <action
-            android:id="@+id/action_pagesFragment_to_pageCountFragment"
-            app:destination="@id/pageCountFragment" />
-        <action
-            android:id="@+id/action_pagesFragment_to_appCountFragment"
-            app:destination="@id/appCountFragment" />
-        <action
-            android:id="@+id/action_pagesFragment_to_pageIndicatorPositionFragment"
-            app:destination="@id/pageIndicatorPositionFragment" />
-    </fragment>
-    <fragment
-        android:id="@+id/pageCountFragment"
-        android:name="app.luma.ui.PageCountFragment"
-        android:label="PageCountFragment" />
-    <fragment
         android:id="@+id/pageIndicatorPositionFragment"
-        android:name="app.luma.ui.PageIndicatorPositionFragment"
+        android:name="com.vandam.luma.ui.PageIndicatorPositionFragment"
         android:label="PageIndicatorPositionFragment" />
     <fragment
-        android:id="@+id/appCountFragment"
-        android:name="app.luma.ui.AppCountFragment"
-        android:label="AppCountFragment">
-        <argument
-            android:name="pageNumber"
-            app:argType="integer" />
-    </fragment>
-    <fragment
         android:id="@+id/gesturesFragment"
-        android:name="app.luma.ui.GesturesFragment"
+        android:name="com.vandam.luma.ui.GesturesFragment"
         android:label="GesturesFragment">
+        <argument
+            android:name="gesture_scope"
+            app:argType="string"
+            android:defaultValue="Homescreen" />
     </fragment>
     <fragment
         android:id="@+id/gestureActionFragment"
-        android:name="app.luma.ui.GestureActionFragment"
+        android:name="com.vandam.luma.ui.GestureActionFragment"
         android:label="GestureActionFragment">
         <argument
             android:name="gesture_type"
             app:argType="string"
             android:defaultValue="" />
         <argument
+            android:name="gesture_scope"
+            app:argType="string"
+            android:defaultValue="Homescreen" />
+        <argument
             android:name="section_type"
             app:argType="string"
             android:defaultValue="" />
+        <argument
+            android:name="lockscreen_clock_tap"
+            app:argType="boolean"
+            android:defaultValue="false" />
+        <argument
+            android:name="lockscreen_shortcut"
+            app:argType="boolean"
+            android:defaultValue="false" />
+        <argument
+            android:name="lockscreen_date_tap"
+            app:argType="boolean"
+            android:defaultValue="false" />
     </fragment>
     <fragment
         android:id="@+id/settingsFragment"
-        android:name="app.luma.ui.SettingsFragment"
+        android:name="com.vandam.luma.ui.SettingsFragment"
         android:label="SettingsFragment">
         <action
-            android:id="@+id/action_settingsFragment_to_themeModeFragment"
-            app:destination="@id/themeModeFragment" />
+            android:id="@+id/action_settingsFragment_to_keymapsFragment"
+            app:destination="@id/keymapsFragment" />
         <action
-            android:id="@+id/action_settingsFragment_to_pagesFragment"
-            app:destination="@id/pagesFragment" />
+            android:id="@+id/action_settingsFragment_to_homescreenFragment"
+            app:destination="@id/homescreenFragment" />
         <action
             android:id="@+id/action_settingsFragment_to_gesturesFragment"
             app:destination="@id/gesturesFragment" />
         <action
-            android:id="@+id/action_settingsFragment_to_notificationsFragment"
-            app:destination="@id/notificationsFragment" />
+            android:id="@+id/action_settingsFragment_to_lockscreenFragment"
+            app:destination="@id/lockscreenFragment" />
         <action
-            android:id="@+id/action_settingsFragment_to_statusBarFragment"
-            app:destination="@id/statusBarFragment" />
+            android:id="@+id/action_settingsFragment_to_generalFragment"
+            app:destination="@id/generalFragment" />
         <action
-            android:id="@+id/action_settingsFragment_to_hapticsFragment"
+            android:id="@+id/action_settingsFragment_to_accountFragment"
+            app:destination="@id/accountFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/lumaUpdateFragment"
+        android:name="com.vandam.luma.ui.LumaUpdateFragment"
+        android:label="LumaUpdateFragment">
+        <argument
+            android:name="versionName"
+            app:argType="string"
+            android:defaultValue="" />
+    </fragment>
+    <fragment
+        android:id="@+id/accountFragment"
+        android:name="com.vandam.luma.ui.AccountFragment"
+        android:label="AccountFragment" />
+    <fragment
+        android:id="@+id/keymapsFragment"
+        android:name="com.vandam.luma.ui.KeymapsFragment"
+        android:label="KeymapsFragment">
+        <action
+            android:id="@+id/action_keymapsFragment_to_lightOSMediaRouteFragment"
+            app:destination="@id/lightOSMediaRouteFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/lightOSMediaRouteFragment"
+        android:name="com.vandam.luma.ui.LightOSMediaRouteFragment"
+        android:label="LightOSMediaRouteFragment" />
+    <fragment
+        android:id="@+id/homescreenFragment"
+        android:name="com.vandam.luma.ui.HomescreenFragment"
+        android:label="HomescreenFragment">
+        <action
+            android:id="@+id/action_homescreenFragment_to_gesturesFragment"
+            app:destination="@id/gesturesFragment" />
+        <action
+            android:id="@+id/action_homescreenFragment_to_reorderToolsFragment"
+            app:destination="@id/reorderToolsFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/reorderToolsFragment"
+        android:name="com.vandam.luma.ui.ReorderToolsFragment"
+        android:label="ReorderToolsFragment" />
+    <fragment
+        android:id="@+id/renameHomeItemFragment"
+        android:name="com.vandam.luma.ui.RenameHomeItemFragment"
+        android:label="RenameHomeItemFragment">
+        <argument
+            android:name="app_package"
+            app:argType="string"
+            android:defaultValue="" />
+        <argument
+            android:name="app_activity"
+            app:argType="string"
+            android:defaultValue="" />
+        <argument
+            android:name="current_label"
+            app:argType="string"
+            android:defaultValue="" />
+    </fragment>
+    <fragment
+        android:id="@+id/lockscreenFragment"
+        android:name="com.vandam.luma.ui.LockscreenFragment"
+        android:label="LockscreenFragment">
+        <action
+            android:id="@+id/action_lockscreenFragment_to_gesturesFragment"
+            app:destination="@id/gesturesFragment" />
+        <action
+            android:id="@+id/action_lockscreenFragment_to_timeFormatFragment"
+            app:destination="@id/timeFormatFragment" />
+        <action
+            android:id="@+id/action_lockscreenFragment_to_lockscreenDateFormatFragment"
+            app:destination="@id/lockscreenDateFormatFragment" />
+        <action
+            android:id="@+id/action_lockscreenFragment_to_lockscreenTapShortcutsFragment"
+            app:destination="@id/lockscreenTapShortcutsFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/lockscreenTapShortcutsFragment"
+        android:name="com.vandam.luma.ui.LockscreenTapShortcutsFragment"
+        android:label="LockscreenTapShortcutsFragment">
+        <action
+            android:id="@+id/action_lockscreenTapShortcutsFragment_to_gestureActionFragment"
+            app:destination="@id/gestureActionFragment" />
+        <action
+            android:id="@+id/action_lockscreenTapShortcutsFragment_to_lockscreenShortcutIconFragment"
+            app:destination="@id/lockscreenShortcutIconFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/lockscreenDateFormatFragment"
+        android:name="com.vandam.luma.ui.LockscreenDateFormatFragment"
+        android:label="LockscreenDateFormatFragment" />
+    <fragment
+        android:id="@+id/lockscreenShortcutIconFragment"
+        android:name="com.vandam.luma.ui.LockscreenShortcutIconFragment"
+        android:label="LockscreenShortcutIconFragment" />
+    <fragment
+        android:id="@+id/generalFragment"
+        android:name="com.vandam.luma.ui.GeneralFragment"
+        android:label="GeneralFragment">
+        <action
+            android:id="@+id/action_generalFragment_to_colourAppsFragment"
+            app:destination="@id/colourAppsFragment" />
+        <action
+            android:id="@+id/action_generalFragment_to_hapticsFragment"
             app:destination="@id/hapticsFragment" />
     </fragment>
     <fragment
-        android:id="@+id/themeModeFragment"
-        android:name="app.luma.ui.ThemeModeFragment"
-        android:label="ThemeModeFragment" />
+        android:id="@+id/colourAppsFragment"
+        android:name="com.vandam.luma.ui.ColourAppsFragment"
+        android:label="ColourAppsFragment" />
     <fragment
         android:id="@+id/hapticsFragment"
-        android:name="app.luma.ui.HapticsFragment"
+        android:name="com.vandam.luma.ui.HapticsFragment"
         android:label="HapticsFragment" />
     <fragment
-        android:id="@+id/notificationsFragment"
-        android:name="app.luma.ui.NotificationsFragment"
-        android:label="NotificationsFragment" />
-    <fragment
-        android:id="@+id/statusBarFragment"
-        android:name="app.luma.ui.StatusBarFragment"
-        android:label="StatusBarFragment">
-        <action
-            android:id="@+id/action_statusBarFragment_to_statusBarModeFragment"
-            app:destination="@id/statusBarModeFragment" />
-        <action
-            android:id="@+id/action_statusBarFragment_to_statusBarTimeFragment"
-            app:destination="@id/statusBarTimeFragment" />
-        <action
-            android:id="@+id/action_statusBarFragment_to_statusBarBatteryFragment"
-            app:destination="@id/statusBarBatteryFragment" />
-        <action
-            android:id="@+id/action_statusBarFragment_to_statusBarConnectivityFragment"
-            app:destination="@id/statusBarConnectivityFragment" />
-        <action
-            android:id="@+id/action_statusBarFragment_to_statusBarNotificationIndicatorFragment"
-            app:destination="@id/statusBarNotificationIndicatorFragment" />
-    </fragment>
-    <fragment
-        android:id="@+id/statusBarModeFragment"
-        android:name="app.luma.ui.StatusBarModeFragment"
-        android:label="StatusBarModeFragment" />
-    <fragment
-        android:id="@+id/statusBarTimeFragment"
-        android:name="app.luma.ui.StatusBarTimeFragment"
-        android:label="StatusBarTimeFragment">
-        <action
-            android:id="@+id/action_statusBarTimeFragment_to_timeFormatFragment"
-            app:destination="@id/timeFormatFragment" />
-        <action
-            android:id="@+id/action_statusBarTimeFragment_to_gestureActionFragment"
-            app:destination="@id/gestureActionFragment" />
-    </fragment>
-    <fragment
-        android:id="@+id/statusBarBatteryFragment"
-        android:name="app.luma.ui.StatusBarBatteryFragment"
-        android:label="StatusBarBatteryFragment">
-        <action
-            android:id="@+id/action_statusBarBatteryFragment_to_gestureActionFragment"
-            app:destination="@id/gestureActionFragment" />
-    </fragment>
-    <fragment
-        android:id="@+id/statusBarConnectivityFragment"
-        android:name="app.luma.ui.StatusBarConnectivityFragment"
-        android:label="StatusBarConnectivityFragment">
-        <action
-            android:id="@+id/action_statusBarConnectivityFragment_to_gestureActionFragment"
-            app:destination="@id/gestureActionFragment" />
-    </fragment>
-    <fragment
-        android:id="@+id/statusBarNotificationIndicatorFragment"
-        android:name="app.luma.ui.StatusBarNotificationIndicatorFragment"
-        android:label="StatusBarNotificationIndicatorFragment">
-        <action
-            android:id="@+id/action_statusBarNotificationIndicatorFragment_to_notificationIndicatorSectionFragment"
-            app:destination="@id/notificationIndicatorSectionFragment" />
-        <action
-            android:id="@+id/action_statusBarNotificationIndicatorFragment_to_notificationIndicatorAlignmentFragment"
-            app:destination="@id/notificationIndicatorAlignmentFragment" />
-    </fragment>
-    <fragment
-        android:id="@+id/notificationIndicatorSectionFragment"
-        android:name="app.luma.ui.NotificationIndicatorSectionFragment"
-        android:label="NotificationIndicatorSectionFragment" />
-    <fragment
-        android:id="@+id/notificationIndicatorAlignmentFragment"
-        android:name="app.luma.ui.NotificationIndicatorAlignmentFragment"
-        android:label="NotificationIndicatorAlignmentFragment" />
-    <fragment
         android:id="@+id/timeFormatFragment"
-        android:name="app.luma.ui.TimeFormatFragment"
+        android:name="com.vandam.luma.ui.TimeFormatFragment"
         android:label="TimeFormatFragment" />
     <fragment
         android:id="@+id/notificationListFragment"
-        android:name="app.luma.ui.NotificationListFragment"
+        android:name="com.vandam.luma.ui.NotificationListFragment"
         android:label="NotificationListFragment" />
     <fragment
-        android:id="@+id/appActionsFragment"
-        android:name="app.luma.ui.AppActionsFragment"
-        android:label="AppActionsFragment">
-        <argument
-            android:name="appPackage"
-            app:argType="string" />
-        <argument
-            android:name="appLabel"
-            app:argType="string" />
-        <argument
-            android:name="appAlias"
-            app:argType="string"
-            android:defaultValue="" />
-        <argument
-            android:name="appActivityName"
-            app:argType="string"
-            android:defaultValue="" />
-        <argument
-            android:name="homePosition"
-            app:argType="integer"
-            android:defaultValue="-1" />
-        <argument
-            android:name="isHidden"
-            app:argType="boolean"
-            android:defaultValue="false" />
-        <argument
-            android:name="userSerial"
-            app:argType="long"
-            android:defaultValue="-1L" />
-    </fragment>
-    <fragment
         android:id="@+id/confirmFragment"
-        android:name="app.luma.ui.ConfirmFragment"
+        android:name="com.vandam.luma.ui.ConfirmFragment"
         android:label="ConfirmFragment">
         <argument
             android:name="title"

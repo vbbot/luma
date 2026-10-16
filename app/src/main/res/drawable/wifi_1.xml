@@ -2,10 +2,10 @@
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="960"
-    android:viewportHeight="690">
-  <group android:translateY="-135">
+    android:viewportHeight="960">
+  <group android:translateY="960">
     <path
         android:fillColor="@android:color/white"
-        android:pathData="M409,811q-29,-29 -29,-71t29,-71q29,-29 71,-29t71,29q29,29 29,71t-29,71q-29,29 -71,29t-71,-29Z"/>
+        android:pathData="M414.33,-152.33Q386.67,-180 386.67,-218t27.66,-65.67Q442,-311.33 480,-311.33t65.67 27.66Q573.33,-256 573.33,-218t-27.66 65.67Q518,-124.67 480,-124.67t-65.67,-27.66Z"/>
   </group>
 </vector>

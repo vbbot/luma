@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal">
+
+    <LinearLayout
+        android:id="@+id/statusConnectivityLayout"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:clipToPadding="false"
+        android:paddingBottom="32dp">
+
+        <ImageView
+            android:id="@+id/statusAirplane"
+            android:layout_width="wrap_content"
+            android:layout_height="14dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/statusNetworkType"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/public_sans"
+            android:layout_marginEnd="2dp"
+            android:textColor="?attr/primaryColor"
+            android:textSize="@dimen/luma_status_bar_text_size"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/statusSignal"
+            android:layout_width="wrap_content"
+            android:layout_height="14dp"
+            android:visibility="gone"
+            android:src="@drawable/signal_4" />
+
+        <ImageView
+            android:id="@+id/statusWifi"
+            android:layout_width="wrap_content"
+            android:layout_height="14dp"
+            android:visibility="gone"
+            android:src="@drawable/wifi_full" />
+
+        <ImageView
+            android:id="@+id/statusBluetooth"
+            android:layout_width="wrap_content"
+            android:layout_height="14dp"
+            android:visibility="gone"
+            android:src="@drawable/bluetooth" />
+
+        <ImageView
+            android:id="@+id/statusSoundMode"
+            android:layout_width="wrap_content"
+            android:layout_height="14dp"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/statusCall"
+            android:layout_width="wrap_content"
+            android:layout_height="14dp"
+            android:visibility="gone"
+            android:src="@drawable/ic_status_call" />
+
+        <ImageView
+            android:id="@+id/statusFlashlight"
+            android:layout_width="wrap_content"
+            android:layout_height="14dp"
+            android:visibility="gone"
+            android:src="@drawable/ic_shortcut_flashlight" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/statusBatteryLayout"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:baselineAligned="false"
+        android:gravity="center_vertical|end"
+        android:orientation="horizontal"
+        android:clipToPadding="false"
+        android:paddingBottom="32dp">
+
+        <TextView
+            android:id="@+id/statusBatteryText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/public_sans"
+            android:layout_marginEnd="4dp"
+            android:textColor="?attr/primaryColor"
+            android:textSize="@dimen/luma_status_bar_text_size" />
+
+        <ImageView
+            android:id="@+id/statusBattery"
+            android:layout_width="wrap_content"
+            android:layout_height="20dp"
+            android:src="@drawable/battery_full" />
+
+    </LinearLayout>
+
+</LinearLayout>

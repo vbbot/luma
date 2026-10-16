@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:id="@+id/unlockGateStatusBar"
+        style="@style/LumaStatusBarContainer"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <include layout="@layout/luma_status_bar_content" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/volumeIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginEnd="23.5dp"
+        android:layout_marginTop="9.3dp"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/volumeIndicatorLabel"
+            style="@style/TextSmall"
+            android:layout_width="80dp"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/volume_indicator_ringer" />
+
+        <FrameLayout
+            android:id="@+id/volumeIndicatorTrack"
+            android:layout_width="0dp"
+            android:layout_height="4.5dp"
+            android:layout_weight="1">
+
+            <View
+                android:id="@+id/volumeIndicatorTrackLine"
+                android:layout_width="match_parent"
+                android:layout_height="0.8dp"
+                android:layout_gravity="center_vertical" />
+
+            <View
+                android:id="@+id/volumeIndicatorFill"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_gravity="center_vertical" />
+
+        </FrameLayout>
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/unlockGateDate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="30dp"
+        android:breakStrategy="balanced"
+        android:fontFamily="@font/publicsans_regular"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:hyphenationFrequency="none"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:maxWidth="330dp"
+        android:textAlignment="center"
+        android:textSize="20sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/unlockGateClock"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <TextView
+        android:id="@+id/unlockGateClock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/publicsans_thin"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:textAlignment="center"
+        android:textSize="80sp"
+        app:layout_constraintBottom_toTopOf="@id/unlockGateHomeButton"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.5" />
+
+    <LinearLayout
+        android:id="@+id/unlockGateMediaControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/unlockGateHomeButton"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/unlockGateClock"
+        app:layout_constraintVertical_bias="0.44">
+
+        <ImageView
+            android:id="@+id/unlockGateMediaPrev"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:contentDescription="@null"
+            android:focusable="true"
+            android:gravity="center"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_media_skip_previous" />
+
+        <ImageView
+            android:id="@+id/unlockGateMediaPlayPause"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:contentDescription="@null"
+            android:focusable="true"
+            android:gravity="center"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_media_play" />
+
+        <ImageView
+            android:id="@+id/unlockGateMediaStop"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:contentDescription="@null"
+            android:focusable="true"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_media_stop"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/unlockGateMediaNext"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:contentDescription="@null"
+            android:focusable="true"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_media_skip_previous" />
+
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/unlockGateHomeButton"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_marginBottom="12dp"
+        android:clickable="true"
+        android:contentDescription="@null"
+        android:focusable="true"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_unlock_gate_lock"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

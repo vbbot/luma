@@ -177,6 +177,15 @@ class LoginFragment : Fragment() {
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.Top,
         ) {
             val customServerUrl = ServerConfig.customUrl(context)
+            // Above the field: the keyboard opens immediately and covers
+            // everything below it.
+            SelectorButton(
+                label = stringResource(R.string.server_label),
+                value = customServerUrl.ifBlank { stringResource(R.string.server_default) },
+                enabled = !isSubmitting.value,
+                onClick = { findNavController().navigate(R.id.serverFragment) },
+            )
+            Spacer(modifier = Modifier.height(SettingsFormSpacing))
             MessageText(
                 text =
                     if (customServerUrl.isBlank()) {
@@ -256,14 +265,6 @@ class LoginFragment : Fragment() {
                 Spacer(modifier = Modifier.height(SettingsSupportingTextSpacing))
                 MessageText(text = error)
             }
-
-            Spacer(modifier = Modifier.height(SettingsFormSpacing))
-            SelectorButton(
-                label = stringResource(R.string.server_label),
-                value = customServerUrl.ifBlank { stringResource(R.string.server_default) },
-                enabled = !isSubmitting.value,
-                onClick = { findNavController().navigate(R.id.serverFragment) },
-            )
         }
     }
 }

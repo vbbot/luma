@@ -48,11 +48,13 @@ import com.vandam.luma.data.Tool
 import com.vandam.luma.helper.ActionService
 import com.vandam.luma.helper.DaltonizerManager
 import com.vandam.luma.helper.LumaNotificationListener
+import com.vandam.luma.helper.LumaNotificationListener.Companion.isPersistent
 import com.vandam.luma.helper.PhoneNotificationSummary
 import com.vandam.luma.helper.PhoneSignalHelper
 import com.vandam.luma.helper.launchLightOsRoute
 import com.vandam.luma.helper.performAppTapHapticFeedback
 import com.vandam.luma.style.SettingsTheme
+import com.vandam.luma.ui.compose.HeaderIconButton
 import com.vandam.luma.ui.compose.SettingsBodyState
 import com.vandam.luma.ui.compose.SettingsCompactListSpacing
 import com.vandam.luma.ui.compose.LazySettingsList
@@ -119,10 +121,12 @@ class NotificationListFragment : Fragment() {
     private fun loadNotifications(packageLabelCache: MutableMap<String, String>): List<NotificationItem> {
         val phoneNotifications = loadPhoneNotifications()
         val pm = requireContext().packageManager
+        val hidePersistent = Prefs.getInstance(requireContext()).hidePersistentNotifications
         val nonOngoing =
             LumaNotificationListener
                 .getActiveNotifications()
                 .filter { !it.isOngoing }
+                .filterNot { hidePersistent && it.isPersistent() }
         val groupKeysWithChildren =
             nonOngoing
                 .filterNot { it.isGroupSummary() }
@@ -204,6 +208,7 @@ class NotificationListFragment : Fragment() {
             title = notification.extras.getString(Notification.EXTRA_TITLE) ?: appLabel,
             text = notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
             contentIntent = notification.contentIntent,
+            canDismiss = isClearable,
         )
     }
 
@@ -255,6 +260,25 @@ class NotificationListFragment : Fragment() {
             onBack = ::goBack,
             contentPadding = NotificationListContentPadding,
             scrollable = false,
+            trailingContent =
+                if (notifications.any { it.canDismiss }) {
+                    {
+                        HeaderIconButton(
+                            iconRes = R.drawable.close_24px,
+                            contentDescription = stringResource(R.string.notification_list_dismiss_all),
+                            onClick = {
+                                notifications
+                                    .filter { it.canDismiss }
+                                    .forEach { item ->
+                                        dismissItem(item, dismissedKeys, prefs)
+                                        notifications.remove(item)
+                                    }
+                            },
+                        )
+                    }
+                } else {
+                    null
+                },
         ) {
             LazySettingsList(
                 modifier = Modifier.weight(1f, fill = true),
@@ -320,16 +344,24 @@ class NotificationListFragment : Fragment() {
                             }
                         },
                         onDismiss = {
-                            dismissNotification(item)
-                            dismissedKeys.add(item.dismissedKey)
-                            if (item.persistDismissal) {
-                                prefs.dismissedPhoneNotificationKeys = prefs.dismissedPhoneNotificationKeys + item.dismissedKey
-                            }
+                            dismissItem(item, dismissedKeys, prefs)
                             notifications.remove(item)
                         },
                     )
                 }
             }
+        }
+    }
+
+    private fun dismissItem(
+        item: NotificationItem,
+        dismissedKeys: MutableSet<String>,
+        prefs: Prefs,
+    ) {
+        dismissNotification(item)
+        dismissedKeys.add(item.dismissedKey)
+        if (item.persistDismissal) {
+            prefs.dismissedPhoneNotificationKeys = prefs.dismissedPhoneNotificationKeys + item.dismissedKey
         }
     }
 

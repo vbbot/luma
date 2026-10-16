@@ -13,6 +13,7 @@ import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.vandam.luma.R
 import com.vandam.luma.data.Prefs
+import com.vandam.luma.helper.LumaNotificationListener
 import com.vandam.luma.helper.RestartActivity
 import com.vandam.luma.ui.compose.SimpleTextButton
 import com.vandam.luma.ui.compose.SettingsScreen
@@ -21,10 +22,12 @@ import com.vandam.luma.ui.compose.ToggleTextButton
 class GeneralFragment : Fragment() {
     private val prefs by lazy { Prefs.getInstance(requireContext()) }
     private val invertColoursState = mutableStateOf(false)
+    private val hidePersistentNotificationsState = mutableStateOf(false)
 
     override fun onResume() {
         super.onResume()
         invertColoursState.value = prefs.invertColours
+        hidePersistentNotificationsState.value = prefs.hidePersistentNotifications
     }
 
     override fun onCreateView(
@@ -72,6 +75,15 @@ class GeneralFragment : Fragment() {
                             AppCompatDelegate.MODE_NIGHT_YES
                         },
                     )
+                },
+            )
+            ToggleTextButton(
+                title = stringResource(R.string.settings_hide_persistent_notifications),
+                checked = hidePersistentNotificationsState.value,
+                onValueChange = {
+                    hidePersistentNotificationsState.value = it
+                    prefs.hidePersistentNotifications = it
+                    LumaNotificationListener.refresh()
                 },
             )
             SimpleTextButton(stringResource(R.string.settings_colour_apps)) {

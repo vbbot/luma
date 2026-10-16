@@ -63,6 +63,7 @@ enum class StatusBarSectionType(
 
 private const val PAGE_INDICATOR_POSITION = "page_indicator_position"
 private const val SHOW_NOTIFICATION_INDICATOR = "show_notification_indicator"
+private const val HIDE_PERSISTENT_NOTIFICATIONS = "hide_persistent_notifications"
 private const val NOTIFICATION_INDICATOR_SECTION = "notification_indicator_section"
 private const val NOTIFICATION_INDICATOR_ALIGNMENT = "notification_indicator_alignment"
 private const val TIME_FORMAT = "time_format"
@@ -635,6 +636,10 @@ class Prefs(
     var showNotificationIndicator: Boolean
         get() = prefs.getBoolean(SHOW_NOTIFICATION_INDICATOR, true)
         set(value) = prefs.edit().putBoolean(SHOW_NOTIFICATION_INDICATOR, value).apply()
+
+    var hidePersistentNotifications: Boolean
+        get() = prefs.getBoolean(HIDE_PERSISTENT_NOTIFICATIONS, false)
+        set(value) = prefs.edit().putBoolean(HIDE_PERSISTENT_NOTIFICATIONS, value).apply()
 
     var notificationIndicatorSection: NotificationIndicatorSection
         get() = enumPref(NOTIFICATION_INDICATOR_SECTION, NotificationIndicatorSection.Time)

@@ -28,6 +28,7 @@
     <string name="settings_notifications">Notifications</string>
     <string name="settings_miscellaneous">General</string>
     <string name="settings_colour_apps">Colour Filter</string>
+    <string name="settings_hide_persistent_notifications">Hide Persistent Notifications</string>
     <string name="colour_apps_permission_message">Luma requires a system-level permission to toggle the colour filter. To grant it, run:\n\nadb shell pm grant com.vandam.luma android.permission.WRITE_SECURE_SETTINGS</string>
     <string name="settings_keymaps">Keymaps</string>
     <string name="settings_account">Account</string>
@@ -156,6 +157,7 @@
     <!-- Notification list -->
     <string name="notification_list_title">Notifications</string>
     <string name="notification_list_empty">No notifications</string>
+    <string name="notification_list_dismiss_all">Dismiss all</string>
     <string name="notification_list_no_permission">Tap here to grant notification access</string>
     <string name="notification_list_unread_message">Unread message</string>
     <string name="notification_list_unread_messages">Unread messages</string>

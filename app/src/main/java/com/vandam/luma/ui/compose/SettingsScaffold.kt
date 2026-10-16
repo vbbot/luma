@@ -109,7 +109,7 @@ fun SettingsHeader(
 }
 
 @Composable
-private fun HeaderIconButton(
+fun HeaderIconButton(
     @DrawableRes iconRes: Int,
     contentDescription: String,
     onClick: () -> Unit,

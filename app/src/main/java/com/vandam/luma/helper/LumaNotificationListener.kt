@@ -3,6 +3,7 @@ package com.vandam.luma.helper
 import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import com.vandam.luma.data.Prefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,6 +76,10 @@ class LumaNotificationListener : NotificationListenerService() {
             return false
         }
 
+        // Notifications the user cannot swipe away: ongoing ones and ones
+        // posted with FLAG_NO_CLEAR. Dismissing them from Luma has no effect.
+        fun StatusBarNotification.isPersistent(): Boolean = isOngoing || !isClearable
+
         fun getActiveNotificationPackages(): Set<String> {
             rebuildNotificationSnapshot()
             return notificationSnapshot.packages
@@ -87,6 +92,11 @@ class LumaNotificationListener : NotificationListenerService() {
 
         fun dismissNotification(key: String) {
             instance.get()?.cancelNotification(key)
+        }
+
+        // Re-evaluates the indicators after the persistent notification setting changes.
+        fun refresh() {
+            rebuildNotificationSnapshot()
         }
 
         fun dismissMediaNotifications(packageName: String) {
@@ -113,6 +123,7 @@ class LumaNotificationListener : NotificationListenerService() {
                 }.getOrNull() ?: return
             val filteredNotifications =
                 activeNotifications.filterNot { it.shouldFilter(svc) }
+            val hidePersistent = Prefs.getInstance(svc).hidePersistentNotifications
             val nextSnapshot =
                 NotificationSnapshot(
                     notifications = filteredNotifications,
@@ -120,6 +131,7 @@ class LumaNotificationListener : NotificationListenerService() {
                         filteredNotifications
                             .asSequence()
                             .filterNot { it.isOngoing }
+                            .filterNot { hidePersistent && it.isPersistent() }
                             .map { it.packageName }
                             .filterNot(PHONE_NOTIFICATION_PACKAGES::contains)
                             .toSet(),

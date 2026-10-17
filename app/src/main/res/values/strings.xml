@@ -238,4 +238,5 @@
     <string name="content_desc_remove_app">Uninstall</string>
     <string name="content_desc_previous_page">Previous</string>
     <string name="content_desc_next_page">Next</string>
+    <string name="lockscreen_card_undo_hint">Long-press to undo</string>
 </resources>

@@ -54,12 +54,21 @@ sealed interface CardOpenTarget {
     ) : CardOpenTarget
 }
 
+// Long-press on the page runs it on the server (lockscreen:act).
+data class CardAction(
+    val id: String,
+    val label: String,
+    val pendingText: String?,
+    val undo: Boolean,
+)
+
 data class CardPage(
     val id: String,
     val validFrom: Long?,
     val validUntil: Long?,
     val blocks: List<CardBlock>,
     val open: CardOpenTarget?,
+    val primary: CardAction? = null,
 ) {
     fun isValidAt(now: Long) = (validFrom == null || validFrom <= now) && (validUntil == null || validUntil > now)
 }
@@ -221,12 +230,23 @@ object LockscreenCards {
                 target.string("tool")?.let(CardOpenTarget::ToolTarget)
                     ?: target.string("app")?.let(CardOpenTarget::AppTarget)
             }
+        val primary =
+            json.obj("primary")?.let { action ->
+                val id = action.string("id") ?: return@let null
+                CardAction(
+                    id = id,
+                    label = action.string("label") ?: id,
+                    pendingText = action.string("pendingText"),
+                    undo = action["undo"]?.jsonPrimitive?.booleanOrNull == true,
+                )
+            }
         return CardPage(
             id = json.string("id") ?: return null,
             validFrom = json.number("validFrom")?.toLong(),
             validUntil = json.number("validUntil")?.toLong(),
             blocks = blocks,
             open = open,
+            primary = primary,
         )
     }
 

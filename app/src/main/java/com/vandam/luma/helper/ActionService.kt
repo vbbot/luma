@@ -65,7 +65,9 @@ import com.vandam.luma.data.AppModel
 import com.vandam.luma.data.Constants.Action
 import com.vandam.luma.data.GestureScope
 import com.vandam.luma.data.GestureType
+import com.vandam.luma.data.CardAction
 import com.vandam.luma.data.CardOpenTarget
+import com.vandam.luma.data.CardPage
 import com.vandam.luma.data.LockscreenCard
 import com.vandam.luma.data.LockscreenCards
 import com.vandam.luma.data.PlacedCard
@@ -75,6 +77,7 @@ import com.vandam.luma.data.Prefs
 import com.vandam.luma.data.StatusBarSectionType
 import com.vandam.luma.data.Tool
 import com.vandam.luma.listener.SwipeTouchListener
+import dev.convex.android.ConvexClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +91,9 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
+import java.util.UUID
 
 private data class UnlockGateCellularSnapshot(
     val serviceState: Int = ServiceState.STATE_OUT_OF_SERVICE,
@@ -170,6 +175,27 @@ class ActionService : AccessibilityService() {
     // Card id -> page shown, so updates and re-renders keep the place.
     private val cardPages = mutableMapOf<String, String>()
     private val cardRenderer by lazy { LockscreenCardRenderer(this, prefs) }
+
+    // Card actions in flight (long-pressed), by "cardId/pageId". The page keeps
+    // showing its pendingText until `until`, even after the server removes it,
+    // and a second long-press in that time undoes the action.
+    private data class PendingCardAction(
+        val cardId: String,
+        val page: CardPage,
+        val index: Int,
+        val action: CardAction,
+        val text: String,
+        val until: Long,
+        val nextPageId: String?,
+    )
+
+    private val pendingCardActions = mutableMapOf<String, PendingCardAction>()
+
+    // Card id -> page to show once a completed page has gone.
+    private val cardNextPages = mutableMapOf<String, String>()
+
+    @Volatile
+    private var cardClient: ConvexClient? = null
 
     override fun onServiceConnected() {
         configureServiceInfo()
@@ -280,12 +306,14 @@ class ActionService : AccessibilityService() {
         // keep its place.
         val keepPlace = cards.filterNot { it.resetOnWake }.map { it.id }.toSet()
         cardPages.keys.retainAll(keepPlace)
+        cardNextPages.keys.retainAll(keepPlace)
         cards = emptyList()
         renderCurrentLockscreenMessage()
         val accountNumber = prefs.accountNumber
         if (accountNumber.isBlank()) return
         val application = applicationContext as? LumaApplication ?: return
         val client = application.createConvexClient() ?: return
+        cardClient = client
 
         lockscreenMessageObserverJob =
             CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
@@ -314,6 +342,7 @@ class ActionService : AccessibilityService() {
                 } catch (exception: Exception) {
                     Log.w(TAG, "Lock-screen message subscription failed", exception)
                 } finally {
+                    if (cardClient === client) cardClient = null
                     application.closeConvexClient(client)
                 }
             }
@@ -334,7 +363,9 @@ class ActionService : AccessibilityService() {
         cardRefreshRunnable?.let(mainHandler::removeCallbacks)
         cardRefreshRunnable = null
         if (lockscreenMessageObserverJob?.isActive != true) return
-        val next = LockscreenCards.nextChangeAt(cards, now) ?: return
+        val next =
+            listOfNotNull(LockscreenCards.nextChangeAt(cards, now), pendingCardActions.values.minOfOrNull { it.until })
+                .minOrNull() ?: return
 
         val runnable =
             Runnable {
@@ -2781,7 +2812,7 @@ class ActionService : AccessibilityService() {
         interactive: Boolean,
     ) {
         val now = System.currentTimeMillis()
-        val placed = if (visible && prefs.lockscreenGlances) LockscreenCards.place(cards, now) else emptyList()
+        val placed = if (visible && prefs.lockscreenGlances) LockscreenCards.place(cardsWithPending(now), now) else emptyList()
         cardRenderer.render(
             container = view.findViewById(R.id.unlockGateCards),
             placed = placed,
@@ -2794,8 +2825,87 @@ class ActionService : AccessibilityService() {
                 renderCurrentLockscreenMessage()
             },
             onOpen = ::openCardTarget,
+            pendingTextFor = { cardId, pageId -> pendingCardActions["$cardId/$pageId"]?.takeIf { it.until > now }?.text },
+            onAction = ::runCardAction,
         )
         scheduleCardRefresh(now)
+    }
+
+    // Cards as the server sent them, plus pages whose action is still showing
+    // its pending text after the server already removed them.
+    private fun cardsWithPending(now: Long): List<LockscreenCard> {
+        pendingCardActions.values.removeAll { it.until <= now }
+        if (pendingCardActions.isEmpty()) return cards
+        return cards.map { card ->
+            val missing = pendingCardActions.values.filter { it.cardId == card.id && card.pages.none { page -> page.id == it.page.id } }
+            if (missing.isEmpty()) {
+                card
+            } else {
+                val pages = card.pages.toMutableList()
+                missing.sortedBy { it.index }.forEach { pages.add(it.index.coerceAtMost(pages.size), it.page) }
+                card.copy(pages = pages)
+            }
+        }
+    }
+
+    private fun runCardAction(
+        cardId: String,
+        pageId: String,
+        action: CardAction,
+    ) {
+        if (unlockGateStateMachine.state.phase == UnlockGatePhase.SecureMask) return
+        val client = cardClient ?: return
+        val key = "$cardId/$pageId"
+        Log.d(TAG, "Card action ${action.id} on $key, pending=${pendingCardActions.containsKey(key)}")
+        val now = System.currentTimeMillis()
+        val pending = pendingCardActions[key]?.takeIf { it.until > now }
+        val undo = pending != null
+        if (pending != null) {
+            if (!pending.action.undo) return
+            pendingCardActions.remove(key)
+            cardPages[cardId] = pageId
+        } else {
+            val pages = cardsWithPending(now).firstOrNull { it.id == cardId }?.validPages(now).orEmpty()
+            val index = pages.indexOfFirst { it.id == pageId }
+            val page = pages.getOrNull(index) ?: return
+            pendingCardActions[key] =
+                PendingCardAction(
+                    cardId = cardId,
+                    page = page,
+                    index = index,
+                    action = action,
+                    text = action.pendingText ?: action.label,
+                    until = now + CARD_ACTION_PENDING_MS,
+                    nextPageId = pages.getOrNull(index + 1)?.id ?: pages.getOrNull(index - 1)?.id,
+                )
+            pages.getOrNull(index + 1)?.id?.let { cardNextPages[cardId] = it }
+        }
+        performLongPressHapticFeedback(this)
+        renderCurrentLockscreenMessage()
+
+        val accountNumber = prefs.accountNumber
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching {
+                client.mutation<Unit?>(
+                    name = "lockscreen:act",
+                    args =
+                        mapOf(
+                            "accountNumber" to accountNumber,
+                            "cardId" to cardId,
+                            "pageId" to pageId,
+                            "actionId" to action.id,
+                            "undo" to undo,
+                            "requestId" to UUID.randomUUID().toString(),
+                        ),
+                )
+            }.onFailure { error ->
+                Log.w(TAG, "Card action failed", error)
+                withContext(Dispatchers.Main) {
+                    pendingCardActions.remove(key)
+                    renderCurrentLockscreenMessage()
+                }
+            }
+        }
     }
 
     // The page last shown, if it is still there; otherwise the card's start
@@ -2804,6 +2914,7 @@ class ActionService : AccessibilityService() {
         val ids = placed.pages.map { it.id }
         val page =
             cardPages[placed.card.id]?.takeIf { it in ids }
+                ?: cardNextPages[placed.card.id]?.takeIf { it in ids }
                 ?: placed.card.startPageId?.takeIf { it in ids }
                 ?: ids.first()
         cardPages[placed.card.id] = page
@@ -3711,6 +3822,10 @@ class ActionService : AccessibilityService() {
         private const val UNLOCK_GATE_HIDE_DELAY_MS = 100L
         private const val HOME_KEY_UNLOCK_GATE_HIDE_DELAY_MS = 0L
         private const val UNLOCK_GATE_SHORTCUT_HIDE_DELAY_MS = 150L
+
+        // How long a long-pressed card page shows e.g. "✓ Done", and can be
+        // long-pressed again to undo.
+        private const val CARD_ACTION_PENDING_MS = 4_000L
         private const val VOLUME_INDICATOR_HIDE_DELAY_MS = 1500L
         private const val ICON_SCALE = 1.0f
         private const val UNLOCK_GATE_CLOCK_TEXT_SIZE_SP = 80f

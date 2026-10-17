@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -12,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import com.vandam.luma.R
+import com.vandam.luma.data.CardAction
 import com.vandam.luma.data.CardBlock
 import com.vandam.luma.data.CardOpenTarget
 import com.vandam.luma.data.PlacedCard
@@ -38,6 +40,29 @@ class LockscreenCardRenderer(
         const val SECONDARY_ALPHA = 0xBB
     }
 
+    // Rebuilding the views while a finger is down cancels the press (a server
+    // update arriving mid long-press), so renders wait until it lifts.
+    private var touching = false
+    private var deferredRender: (() -> Unit)? = null
+
+    // What was last drawn; identical renders are skipped.
+    private var lastSignature: String? = null
+
+    private val touchTracker =
+        View.OnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> touching = true
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    touching = false
+                    deferredRender?.let { render ->
+                        deferredRender = null
+                        view.post(render)
+                    }
+                }
+            }
+            false
+        }
+
     fun render(
         container: LinearLayout,
         placed: List<PlacedCard>,
@@ -47,10 +72,33 @@ class LockscreenCardRenderer(
         textColor: Int,
         onStep: (cardId: String, pageId: String) -> Unit,
         onOpen: (CardOpenTarget) -> Unit,
+        // Text shown instead of a page whose action is in flight, e.g. "✓ Done".
+        pendingTextFor: (cardId: String, pageId: String) -> String? = { _, _ -> null },
+        onAction: (cardId: String, pageId: String, action: CardAction) -> Unit = { _, _, _ -> },
     ) {
+        if (touching) {
+            deferredRender = {
+                render(container, placed, pageIdFor, now, interactive, textColor, onStep, onOpen, pendingTextFor, onAction)
+            }
+            return
+        }
+        val signature =
+            buildString {
+                append(interactive).append(textColor).append(container.childCount > 0)
+                placed.forEach { entry ->
+                    val pageId = pageIdFor(entry)
+                    append(entry).append(pageId).append(pendingTextFor(entry.card.id, pageId))
+                    // Time blocks read differently as minutes pass.
+                    if (entry.pages.any { page -> page.blocks.any { it is CardBlock.Time } }) append(now / 60_000)
+                }
+            }
+        if (signature == lastSignature && container.childCount > 0 == placed.isNotEmpty()) return
+        lastSignature = signature
+
         container.removeAllViews()
         placed.forEachIndexed { index, entry ->
-            val cardView = cardView(entry, pageIdFor(entry), now, interactive, textColor, onStep, onOpen)
+            val cardView =
+                cardView(entry, pageIdFor(entry), now, interactive, textColor, onStep, onOpen, pendingTextFor, onAction)
             if (index > 0) {
                 cardView.layoutParams = verticalParams().apply { topMargin = dp(CARD_GAP_DP) }
             }
@@ -67,6 +115,8 @@ class LockscreenCardRenderer(
         textColor: Int,
         onStep: (String, String) -> Unit,
         onOpen: (CardOpenTarget) -> Unit,
+        pendingTextFor: (String, String) -> String?,
+        onAction: (String, String, CardAction) -> Unit,
     ): LinearLayout {
         val card = entry.card
         val pages = entry.pages
@@ -81,7 +131,8 @@ class LockscreenCardRenderer(
                 layoutParams = verticalParams()
             }
         if (paged) {
-            val position = "${index + 1}/${card.total ?: pages.size}"
+            // pages can include one whose action is still showing "✓ Done".
+            val position = "${index + 1}/${maxOf(card.total ?: pages.size, pages.size)}"
             column.addView(text(card.title?.let { "$it · $position" } ?: position, secondary = true, textColor))
         }
 
@@ -103,8 +154,21 @@ class LockscreenCardRenderer(
                 gravity = Gravity.CENTER_HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
+        val pendingText = if (entry.asFallback) null else pendingTextFor(card.id, page.id)
         if (entry.asFallback) {
             content.addView(text(card.fallback, secondary = false, textColor))
+        } else if (pendingText != null) {
+            content.addView(text(pendingText, secondary = false, textColor))
+            // Same height as the page it replaces, so nothing moves under the
+            // finger; the second row says how to undo.
+            if (card.regular) {
+                val hint = if (page.primary?.undo == true) context.getString(R.string.lockscreen_card_undo_hint) else " "
+                content.addView(
+                    text(hint, secondary = true, textColor).apply {
+                        layoutParams = verticalParams().apply { topMargin = dp(ROW_GAP_DP) }
+                    },
+                )
+            }
         } else {
             page.blocks.take(if (card.regular) 2 else 1).forEachIndexed { blockIndex, block ->
                 val view = blockView(block, now, textColor)
@@ -117,6 +181,17 @@ class LockscreenCardRenderer(
             content.isClickable = true
             content.setOnClickListener { onOpen(target) }
         }
+        // Long-press runs the action; on a pending page it is the undo, which
+        // the service decides.
+        val action = page.primary.takeIf { !entry.asFallback }
+        if (action != null && interactive) {
+            content.isLongClickable = true
+            content.setOnLongClickListener {
+                onAction(card.id, page.id, action)
+                true
+            }
+        }
+        content.setOnTouchListener(touchTracker)
         row.addView(content)
         row.addView(
             arrow(R.drawable.chevron_right_32px, R.string.content_desc_next_page, showArrows, textColor) {
@@ -223,6 +298,7 @@ class LockscreenCardRenderer(
         layoutParams = LinearLayout.LayoutParams(dp(ARROW_DP), dp(ARROW_DP))
         // Invisible rather than gone, so the text stays centred either way.
         visibility = if (visible) View.VISIBLE else View.INVISIBLE
+        setOnTouchListener(touchTracker)
         if (visible) {
             setOnClickListener {
                 performHapticFeedback(context)

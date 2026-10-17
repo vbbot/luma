@@ -65,8 +65,10 @@ import com.vandam.luma.data.AppModel
 import com.vandam.luma.data.Constants.Action
 import com.vandam.luma.data.GestureScope
 import com.vandam.luma.data.GestureType
-import com.vandam.luma.data.Glance
-import com.vandam.luma.data.GlanceManager
+import com.vandam.luma.data.CardOpenTarget
+import com.vandam.luma.data.LockscreenCard
+import com.vandam.luma.data.LockscreenCards
+import com.vandam.luma.data.PlacedCard
 import com.vandam.luma.data.LockscreenMessage
 import com.vandam.luma.data.LockscreenMessageManager
 import com.vandam.luma.data.Prefs
@@ -162,8 +164,12 @@ class ActionService : AccessibilityService() {
     private var lockscreenMessageObserverJob: Job? = null
     private var lockscreenMessage: LockscreenMessage? = null
     private var lockscreenMessageExpiryRunnable: Runnable? = null
-    private var glances: List<Glance> = emptyList()
-    private var glanceExpiryRunnable: Runnable? = null
+    private var cards: List<LockscreenCard> = emptyList()
+    private var cardRefreshRunnable: Runnable? = null
+
+    // Card id -> page shown, so updates and re-renders keep the place.
+    private val cardPages = mutableMapOf<String, String>()
+    private val cardRenderer by lazy { LockscreenCardRenderer(this, prefs) }
 
     override fun onServiceConnected() {
         configureServiceInfo()
@@ -270,7 +276,11 @@ class ActionService : AccessibilityService() {
 
     private fun startLockscreenMessageObserver() {
         lockscreenMessage = null
-        glances = emptyList()
+        // Each wake starts cards on their first page, unless a card asks to
+        // keep its place.
+        val keepPlace = cards.filterNot { it.resetOnWake }.map { it.id }.toSet()
+        cardPages.keys.retainAll(keepPlace)
+        cards = emptyList()
         renderCurrentLockscreenMessage()
         val accountNumber = prefs.accountNumber
         if (accountNumber.isBlank()) return
@@ -293,9 +303,8 @@ class ActionService : AccessibilityService() {
                             }
                         }
                         launch {
-                            GlanceManager.observe(client, accountNumber).flowOn(Dispatchers.IO).collect { update ->
-                                glances = update
-                                scheduleGlanceExpiry()
+                            LockscreenCards.observe(client, accountNumber).flowOn(Dispatchers.IO).collect { update ->
+                                cards = update
                                 renderCurrentLockscreenMessage()
                             }
                         }
@@ -315,25 +324,25 @@ class ActionService : AccessibilityService() {
         lockscreenMessageObserverJob = null
         lockscreenMessageExpiryRunnable?.let(mainHandler::removeCallbacks)
         lockscreenMessageExpiryRunnable = null
-        glanceExpiryRunnable?.let(mainHandler::removeCallbacks)
-        glanceExpiryRunnable = null
+        cardRefreshRunnable?.let(mainHandler::removeCallbacks)
+        cardRefreshRunnable = null
     }
 
-    // Re-renders when the next visible glance expires, so the one behind it
-    // moves up.
-    private fun scheduleGlanceExpiry() {
-        glanceExpiryRunnable?.let(mainHandler::removeCallbacks)
-        glanceExpiryRunnable = null
-        val nextExpiry = GlanceManager.visible(glances).minOfOrNull { it.expiresAt.toLong() } ?: return
+    // Re-renders when cards next change by themselves: one expiring, a page
+    // window opening or closing, a time block's minute ticking over.
+    private fun scheduleCardRefresh(now: Long) {
+        cardRefreshRunnable?.let(mainHandler::removeCallbacks)
+        cardRefreshRunnable = null
+        if (lockscreenMessageObserverJob?.isActive != true) return
+        val next = LockscreenCards.nextChangeAt(cards, now) ?: return
 
         val runnable =
             Runnable {
-                glanceExpiryRunnable = null
-                scheduleGlanceExpiry()
+                cardRefreshRunnable = null
                 renderCurrentLockscreenMessage()
             }
-        glanceExpiryRunnable = runnable
-        mainHandler.postDelayed(runnable, (nextExpiry - System.currentTimeMillis()).coerceAtLeast(0L))
+        cardRefreshRunnable = runnable
+        mainHandler.postDelayed(runnable, (next - System.currentTimeMillis()).coerceAtLeast(0L))
     }
 
     private fun scheduleLockscreenMessageExpiry(message: LockscreenMessage?) {
@@ -2758,8 +2767,6 @@ class ActionService : AccessibilityService() {
         val textColor = if (isDark) Color.WHITE else Color.BLACK
         view.findViewById<TextView>(R.id.unlockGateClock).setTextColor(textColor)
         view.findViewById<TextView>(R.id.unlockGateDate).setTextColor(textColor)
-        view.findViewById<TextView>(R.id.unlockGateGlance1).setTextColor(textColor)
-        view.findViewById<TextView>(R.id.unlockGateGlance2).setTextColor(textColor)
         val iconTint = if (isDark) Color.WHITE else Color.BLACK
         for (id in listOf(R.id.unlockGateMediaPrev, R.id.unlockGateMediaPlayPause, R.id.unlockGateMediaStop, R.id.unlockGateMediaNext)) {
             val iv = view.findViewById<ImageView>(id)
@@ -2768,20 +2775,54 @@ class ActionService : AccessibilityService() {
         }
     }
 
-    private fun renderGlances(
+    private fun renderCards(
         view: View,
         visible: Boolean,
+        interactive: Boolean,
     ) {
-        val shown = if (visible && prefs.lockscreenGlances) GlanceManager.visible(glances) else emptyList()
-        listOf(R.id.unlockGateGlance1, R.id.unlockGateGlance2).forEachIndexed { index, id ->
-            view.findViewById<TextView>(id).apply {
-                val glance = shown.getOrNull(index)
-                text = glance?.text
-                visibility = if (glance != null) View.VISIBLE else View.GONE
+        val now = System.currentTimeMillis()
+        val placed = if (visible && prefs.lockscreenGlances) LockscreenCards.place(cards, now) else emptyList()
+        cardRenderer.render(
+            container = view.findViewById(R.id.unlockGateCards),
+            placed = placed,
+            pageIdFor = ::currentCardPage,
+            now = now,
+            interactive = interactive,
+            textColor = view.findViewById<TextView>(R.id.unlockGateClock).currentTextColor,
+            onStep = { cardId, pageId ->
+                cardPages[cardId] = pageId
+                renderCurrentLockscreenMessage()
+            },
+            onOpen = ::openCardTarget,
+        )
+        scheduleCardRefresh(now)
+    }
+
+    // The page last shown, if it is still there; otherwise the card's start
+    // page, or its first.
+    private fun currentCardPage(placed: PlacedCard): String {
+        val ids = placed.pages.map { it.id }
+        val page =
+            cardPages[placed.card.id]?.takeIf { it in ids }
+                ?: placed.card.startPageId?.takeIf { it in ids }
+                ?: ids.first()
+        cardPages[placed.card.id] = page
+        return page
+    }
+
+    private fun openCardTarget(target: CardOpenTarget) {
+        if (unlockGateStateMachine.state.phase == UnlockGatePhase.SecureMask) return
+        performAppTapHapticFeedback(this)
+        val launched =
+            when (target) {
+                is CardOpenTarget.ToolTarget ->
+                    Tool.fromId(target.toolId)?.let { launchLightOsRoute(this, it.lightOsRoute) } ?: false
+                is CardOpenTarget.AppTarget ->
+                    packageManager.getLaunchIntentForPackage(target.packageName)?.let { intent ->
+                        runCatching { startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+                    } ?: false
             }
-        }
-        view.findViewById<View>(R.id.unlockGateGlances).visibility =
-            if (shown.isNotEmpty()) View.VISIBLE else View.GONE
+        if (launched) dismissUnlockGateIfNeeded()
     }
 
     private fun updateUnlockGateText(
@@ -2840,7 +2881,7 @@ class ActionService : AccessibilityService() {
                 isFocusable = false
             }
         }
-        renderGlances(view, visible = !isRinging)
+        renderCards(view, visible = !isRinging, interactive = isInteractive)
         if (isRinging) {
             mediaControlsView.visibility = View.GONE
             return

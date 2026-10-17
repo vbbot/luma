@@ -22,6 +22,16 @@ import java.util.Calendar
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
+// Where the shown card sits among the integrations, and how to move: arrows
+// step through pages and on into the next integration (the service works out
+// where to), tapping the header skips to the next integration.
+class CardNavigation(
+    val position: Int,
+    val count: Int,
+    val onArrow: (cardId: String, pageId: String, delta: Int) -> Unit,
+    val onSwitchIntegration: (delta: Int) -> Unit,
+)
+
 // Draws lock screen cards (data/LockscreenCards.kt) into the container under
 // the clock. Every design decision for cards lives here; integrations only
 // describe content.
@@ -32,7 +42,10 @@ class LockscreenCardRenderer(
     private companion object {
         const val PRIMARY_SP = 18f
         const val SECONDARY_SP = 14f
-        const val ARROW_DP = 48
+        // Wide but not tall: the arrows sit beside a single line of text and
+        // should not make the row taller than it.
+        const val ARROW_WIDTH_DP = 48
+        const val ARROW_HEIGHT_DP = 36
         const val ARROW_PADDING_DP = 12
         const val CARD_GAP_DP = 20
         const val ROW_GAP_DP = 6
@@ -71,7 +84,7 @@ class LockscreenCardRenderer(
         now: Long,
         interactive: Boolean,
         textColor: Int,
-        onStep: (cardId: String, pageId: String) -> Unit,
+        navigation: CardNavigation,
         onOpen: (CardOpenTarget) -> Unit,
         // Text shown instead of a page whose action is in flight, e.g. "✓ Done".
         pendingTextFor: (cardId: String, pageId: String) -> String? = { _, _ -> null },
@@ -79,13 +92,14 @@ class LockscreenCardRenderer(
     ) {
         if (touching) {
             deferredRender = {
-                render(container, placed, pageIdFor, now, interactive, textColor, onStep, onOpen, pendingTextFor, onAction)
+                render(container, placed, pageIdFor, now, interactive, textColor, navigation, onOpen, pendingTextFor, onAction)
             }
             return
         }
         val signature =
             buildString {
                 append(interactive).append(textColor).append(container.childCount > 0)
+                append(navigation.position).append('/').append(navigation.count)
                 placed.forEach { entry ->
                     val pageId = pageIdFor(entry)
                     append(entry).append(pageId).append(pendingTextFor(entry.card.id, pageId))
@@ -99,7 +113,7 @@ class LockscreenCardRenderer(
         container.removeAllViews()
         placed.forEachIndexed { index, entry ->
             val cardView =
-                cardView(entry, pageIdFor(entry), now, interactive, textColor, onStep, onOpen, pendingTextFor, onAction)
+                cardView(entry, pageIdFor(entry), now, interactive, textColor, navigation, onOpen, pendingTextFor, onAction)
             if (index > 0) {
                 cardView.layoutParams = verticalParams().apply { topMargin = dp(CARD_GAP_DP) }
             }
@@ -114,7 +128,7 @@ class LockscreenCardRenderer(
         now: Long,
         interactive: Boolean,
         textColor: Int,
-        onStep: (String, String) -> Unit,
+        navigation: CardNavigation,
         onOpen: (CardOpenTarget) -> Unit,
         pendingTextFor: (String, String) -> String?,
         onAction: (String, String, CardAction) -> Unit,
@@ -131,10 +145,31 @@ class LockscreenCardRenderer(
                 gravity = Gravity.CENTER_HORIZONTAL
                 layoutParams = verticalParams()
             }
-        if (paged) {
+        val several = navigation.count > 1
+        if (!entry.asFallback && (paged || several)) {
             // pages can include one whose action is still showing "✓ Done".
-            val position = "${index + 1}/${maxOf(card.total ?: pages.size, pages.size)}"
-            column.addView(text(card.title?.let { "$it · $position" } ?: position, secondary = true, textColor))
+            val position = if (paged) "${index + 1}/${maxOf(card.total ?: pages.size, pages.size)}" else null
+            val header =
+                buildString {
+                    append(listOfNotNull(card.title, position).joinToString(" · "))
+                    // One dot per integration, filled for this one.
+                    if (several) {
+                        if (isNotEmpty()) append("   ")
+                        append((0 until navigation.count).joinToString(" ") { if (it == navigation.position) "●" else "○" })
+                    }
+                }
+            column.addView(
+                text(header, secondary = true, textColor).apply {
+                    if (several && interactive) {
+                        contentDescription = context.getString(R.string.content_desc_next_integration)
+                        setOnTouchListener(touchTracker)
+                        setOnClickListener {
+                            performHapticFeedback(context)
+                            navigation.onSwitchIntegration(1)
+                        }
+                    }
+                },
+            )
         }
 
         val row =
@@ -143,10 +178,13 @@ class LockscreenCardRenderer(
                 gravity = Gravity.CENTER_VERTICAL
                 layoutParams = verticalParams()
             }
-        val showArrows = paged && interactive
+        val showArrows = (paged || several) && interactive
+        // A one-line fallback has no pages to show, so its arrows (and a tap)
+        // move between integrations instead.
+        val stepIntegrations = entry.asFallback && several
         row.addView(
             arrow(R.drawable.chevron_left_32px, R.string.content_desc_previous_page, showArrows, textColor) {
-                onStep(card.id, pages[(index - 1 + pages.size) % pages.size].id)
+                if (stepIntegrations) navigation.onSwitchIntegration(-1) else navigation.onArrow(card.id, page.id, -1)
             },
         )
         val content =
@@ -171,7 +209,7 @@ class LockscreenCardRenderer(
                 )
             }
         } else {
-            page.blocks.take(if (card.regular) 2 else 1).forEachIndexed { blockIndex, block ->
+            page.blocks.take(entry.maxBlocks).forEachIndexed { blockIndex, block ->
                 val view = blockView(block, now, textColor)
                 if (blockIndex > 0) view.layoutParams = verticalParams().apply { topMargin = dp(ROW_GAP_DP) }
                 content.addView(view)
@@ -181,6 +219,13 @@ class LockscreenCardRenderer(
         if (target != null && interactive) {
             content.isClickable = true
             content.setOnClickListener { onOpen(target) }
+        } else if (stepIntegrations && interactive) {
+            content.isClickable = true
+            content.contentDescription = context.getString(R.string.content_desc_next_integration)
+            content.setOnClickListener {
+                performHapticFeedback(context)
+                navigation.onSwitchIntegration(1)
+            }
         }
         // Long-press runs the action; on a pending page it is the undo, which
         // the service decides.
@@ -196,7 +241,7 @@ class LockscreenCardRenderer(
         row.addView(content)
         row.addView(
             arrow(R.drawable.chevron_right_32px, R.string.content_desc_next_page, showArrows, textColor) {
-                onStep(card.id, pages[(index + 1) % pages.size].id)
+                if (stepIntegrations) navigation.onSwitchIntegration(1) else navigation.onArrow(card.id, page.id, 1)
             },
         )
         column.addView(row)
@@ -295,8 +340,8 @@ class LockscreenCardRenderer(
         setColorFilter(textColor)
         contentDescription = context.getString(description)
         val padding = dp(ARROW_PADDING_DP)
-        setPadding(padding, padding, padding, padding)
-        layoutParams = LinearLayout.LayoutParams(dp(ARROW_DP), dp(ARROW_DP))
+        setPadding(padding, dp(6), padding, dp(6))
+        layoutParams = LinearLayout.LayoutParams(dp(ARROW_WIDTH_DP), dp(ARROW_HEIGHT_DP))
         // Invisible rather than gone, so the text stays centred either way.
         visibility = if (visible) View.VISIBLE else View.INVISIBLE
         setOnTouchListener(touchTracker)

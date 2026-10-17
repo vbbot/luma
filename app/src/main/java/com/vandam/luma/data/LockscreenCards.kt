@@ -96,6 +96,8 @@ data class PlacedCard(
     val card: LockscreenCard,
     val pages: List<CardPage>,
     val asFallback: Boolean,
+    // How many of a page's blocks to draw (under its header).
+    val maxBlocks: Int = 2,
 )
 
 object LockscreenCards {
@@ -139,30 +141,39 @@ object LockscreenCards {
         }
     }
 
-    // Which cards to draw now, in order: high relevance first, then the
-    // dashboard's order, within the row budget.
+    // The integrations that have something to show now, in order: high
+    // relevance first, then the dashboard's order. The lock screen shows one
+    // at a time and steps through them.
+    fun deck(
+        cards: List<LockscreenCard>,
+        now: Long,
+    ): List<LockscreenCard> =
+        cards
+            .filter { it.expiresAt > now && it.validPages(now).isNotEmpty() }
+            .sortedByDescending { it.isHighRelevance(now) }
+
+    // Which of these cards to draw, within the row budget, from roomiest to
+    // tightest: every block (a regular card takes 2 rows, compact 1), the
+    // header and first block only (1 row), the one-line fallback (0), nothing
+    // (below 0). The lock screen lowers the budget until the card fits.
     fun place(
         cards: List<LockscreenCard>,
         now: Long,
         rowBudget: Int = ROW_BUDGET,
     ): List<PlacedCard> {
-        val candidates =
-            cards
-                .filter { it.expiresAt > now && it.validPages(now).isNotEmpty() }
-                .sortedByDescending { it.isHighRelevance(now) }
         var rowsLeft = rowBudget
         val placed = mutableListOf<PlacedCard>()
-        for (card in candidates) {
-            if (placed.size == MAX_CARDS || rowsLeft == 0) break
+        for (card in deck(cards, now)) {
+            if (placed.size == MAX_CARDS || rowsLeft < 0) break
             val rows = if (card.regular) 2 else 1
             val pages = card.validPages(now)
-            if (rows <= rowsLeft) {
-                placed += PlacedCard(card, pages, asFallback = false)
-                rowsLeft -= rows
-            } else {
-                placed += PlacedCard(card, pages, asFallback = true)
-                rowsLeft -= 1
-            }
+            placed +=
+                when {
+                    rows <= rowsLeft -> PlacedCard(card, pages, asFallback = false, maxBlocks = rows)
+                    rowsLeft >= 1 -> PlacedCard(card, pages, asFallback = false, maxBlocks = 1)
+                    else -> PlacedCard(card, pages, asFallback = true)
+                }
+            rowsLeft -= rows
         }
         return placed
     }

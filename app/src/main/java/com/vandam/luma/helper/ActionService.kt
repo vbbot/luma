@@ -195,6 +195,10 @@ class ActionService : AccessibilityService() {
     // Card id -> page to show once a completed page has gone.
     private val cardNextPages = mutableMapOf<String, String>()
 
+    // The integration shown under the clock; the first in the deck after each
+    // wake.
+    private var currentCardId: String? = null
+
     @Volatile
     private var cardClient: ConvexClient? = null
 
@@ -308,6 +312,7 @@ class ActionService : AccessibilityService() {
         val keepPlace = cards.filterNot { it.resetOnWake }.map { it.id }.toSet()
         cardPages.keys.retainAll(keepPlace)
         cardNextPages.keys.retainAll(keepPlace)
+        currentCardId = null
         cards = emptyList()
         renderCurrentLockscreenMessage()
         val accountNumber = prefs.accountNumber
@@ -2813,7 +2818,18 @@ class ActionService : AccessibilityService() {
         interactive: Boolean,
     ) {
         val now = System.currentTimeMillis()
-        val candidates = if (visible && prefs.lockscreenGlances) cardsWithPending(now) else emptyList()
+        val deck = if (visible && prefs.lockscreenGlances) LockscreenCards.deck(cardsWithPending(now), now) else emptyList()
+        // One integration at a time: there is room for only one on the Light
+        // Phone, and the arrows and header step through the rest.
+        val current = deck.firstOrNull { it.id == currentCardId } ?: deck.firstOrNull()
+        val candidates = listOfNotNull(current)
+        val navigation =
+            CardNavigation(
+                position = deck.indexOf(current).coerceAtLeast(0),
+                count = deck.size,
+                onArrow = ::stepCards,
+                onSwitchIntegration = { delta -> switchIntegration(current?.id, delta) },
+            )
         val container = view.findViewById<LinearLayout>(R.id.unlockGateCards)
         val available = unlockGateCardSpace(view)
         // Fewer rows until the cards fit between the clock and the home button,
@@ -2828,15 +2844,12 @@ class ActionService : AccessibilityService() {
                 now = now,
                 interactive = interactive,
                 textColor = view.findViewById<TextView>(R.id.unlockGateClock).currentTextColor,
-                onStep = { cardId, pageId ->
-                    cardPages[cardId] = pageId
-                    renderCurrentLockscreenMessage()
-                },
+                navigation = navigation,
                 onOpen = ::openCardTarget,
                 pendingTextFor = { cardId, pageId -> pendingCardActions["$cardId/$pageId"]?.takeIf { it.until > now }?.text },
                 onAction = ::runCardAction,
             )
-            if (available == null || rowBudget == 0 || cardRenderer.touching) break
+            if (available == null || rowBudget < 0 || cardRenderer.touching) break
             if (measuredHeight(container, view.width) <= available) break
             rowBudget--
         }
@@ -2917,6 +2930,46 @@ class ActionService : AccessibilityService() {
             params.verticalBias = bias
             clock.layoutParams = params
         }
+    }
+
+    // An arrow on the shown card: the neighbouring page, or past either end the
+    // next or previous integration (its first or last page), wrapping round.
+    private fun stepCards(
+        cardId: String,
+        pageId: String,
+        delta: Int,
+    ) {
+        val now = System.currentTimeMillis()
+        val deck = LockscreenCards.deck(cardsWithPending(now), now)
+        val cardIndex = deck.indexOfFirst { it.id == cardId }
+        if (cardIndex < 0) return
+        val pages = deck[cardIndex].validPages(now)
+        val target = pages.indexOfFirst { it.id == pageId } + delta
+        if (target in pages.indices) {
+            cardPages[cardId] = pages[target].id
+        } else {
+            val next = deck[(cardIndex + delta + deck.size) % deck.size]
+            val nextPages = next.validPages(now)
+            currentCardId = next.id
+            cardPages[next.id] = (if (delta > 0) nextPages.first() else nextPages.last()).id
+        }
+        renderCurrentLockscreenMessage()
+    }
+
+    // Tapping the header: straight to the next integration, on its start page.
+    private fun switchIntegration(
+        fromCardId: String?,
+        delta: Int,
+    ) {
+        val now = System.currentTimeMillis()
+        val deck = LockscreenCards.deck(cardsWithPending(now), now)
+        if (deck.size < 2) return
+        val index = deck.indexOfFirst { it.id == fromCardId }.coerceAtLeast(0)
+        val next = deck[(index + delta + deck.size) % deck.size]
+        currentCardId = next.id
+        cardPages.remove(next.id)
+        cardNextPages.remove(next.id)
+        renderCurrentLockscreenMessage()
     }
 
     // Cards as the server sent them, plus pages whose action is still showing

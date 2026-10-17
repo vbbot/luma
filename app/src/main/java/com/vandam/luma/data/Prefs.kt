@@ -101,6 +101,7 @@ private const val LOCKSCREEN_DATE_TAP_APP = "lockscreen_date_tap_app"
 private const val LOCKSCREEN_CLOCK_NOTIFICATION_INDICATOR = "lockscreen_clock_notification_indicator"
 private const val LOCKSCREEN_GLANCES = "lockscreen_glances"
 private const val INTEGRATION_NOTIFICATIONS = "integration_notifications"
+private const val ASKED_NOTIFICATION_PERMISSION = "asked_notification_permission"
 private const val LOCKSCREEN_SHORTCUT_ACTION = "lockscreen_shortcut_action"
 private const val LOCKSCREEN_SHORTCUT_APP = "lockscreen_shortcut_app"
 private const val LOCKSCREEN_SHORTCUT_ICON = "lockscreen_shortcut_icon"
@@ -506,6 +507,12 @@ class Prefs(
     var integrationNotifications: Boolean
         get() = prefs.getBoolean(INTEGRATION_NOTIFICATIONS, true)
         set(value) = prefs.edit().putBoolean(INTEGRATION_NOTIFICATIONS, value).apply()
+
+    // Whether Luma has asked Android for permission to post notifications;
+    // it asks once, the first time a card brings one (MainActivity).
+    var askedNotificationPermission: Boolean
+        get() = prefs.getBoolean(ASKED_NOTIFICATION_PERMISSION, false)
+        set(value) = prefs.edit().putBoolean(ASKED_NOTIFICATION_PERMISSION, value).apply()
 
     fun getLockscreenShortcutAction(): Constants.Action {
         val action = loadAction(LOCKSCREEN_SHORTCUT_ACTION, Constants.Action.OpenApp)

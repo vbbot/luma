@@ -102,9 +102,10 @@ object LockscreenCards {
     const val PROTOCOL = 1
     val BLOCK_TYPES = listOf("text", "pair", "progress", "time")
 
-    // Content rows under the clock. regular cards take 2, compact 1; a paged
-    // card's header comes on top of that.
-    private const val ROW_BUDGET = 4
+    // Content rows under the clock at most. regular cards take 2, compact 1; a
+    // paged card's header comes on top of that. The lock screen lowers the
+    // budget when the screen has less room (see ActionService.renderCards).
+    const val ROW_BUDGET = 4
     private const val MAX_CARDS = 2
     private const val LOG_TAG = "LockscreenCards"
     private const val QUERY_PATH = "lockscreen:getForDevice"
@@ -143,12 +144,13 @@ object LockscreenCards {
     fun place(
         cards: List<LockscreenCard>,
         now: Long,
+        rowBudget: Int = ROW_BUDGET,
     ): List<PlacedCard> {
         val candidates =
             cards
                 .filter { it.expiresAt > now && it.validPages(now).isNotEmpty() }
                 .sortedByDescending { it.isHighRelevance(now) }
-        var rowsLeft = ROW_BUDGET
+        var rowsLeft = rowBudget
         val placed = mutableListOf<PlacedCard>()
         for (card in candidates) {
             if (placed.size == MAX_CARDS || rowsLeft == 0) break

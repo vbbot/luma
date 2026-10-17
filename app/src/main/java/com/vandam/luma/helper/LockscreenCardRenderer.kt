@@ -42,7 +42,8 @@ class LockscreenCardRenderer(
 
     // Rebuilding the views while a finger is down cancels the press (a server
     // update arriving mid long-press), so renders wait until it lifts.
-    private var touching = false
+    var touching = false
+        private set
     private var deferredRender: (() -> Unit)? = null
 
     // What was last drawn; identical renders are skipped.

@@ -52,6 +52,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.LinearLayout
+import androidx.constraintlayout.widget.ConstraintLayout
 import android.widget.TextView
 import androidx.annotation.RequiresApi
 import androidx.biometric.BiometricManager
@@ -2812,23 +2813,110 @@ class ActionService : AccessibilityService() {
         interactive: Boolean,
     ) {
         val now = System.currentTimeMillis()
-        val placed = if (visible && prefs.lockscreenGlances) LockscreenCards.place(cardsWithPending(now), now) else emptyList()
-        cardRenderer.render(
-            container = view.findViewById(R.id.unlockGateCards),
-            placed = placed,
-            pageIdFor = ::currentCardPage,
-            now = now,
-            interactive = interactive,
-            textColor = view.findViewById<TextView>(R.id.unlockGateClock).currentTextColor,
-            onStep = { cardId, pageId ->
-                cardPages[cardId] = pageId
-                renderCurrentLockscreenMessage()
-            },
-            onOpen = ::openCardTarget,
-            pendingTextFor = { cardId, pageId -> pendingCardActions["$cardId/$pageId"]?.takeIf { it.until > now }?.text },
-            onAction = ::runCardAction,
-        )
+        val candidates = if (visible && prefs.lockscreenGlances) cardsWithPending(now) else emptyList()
+        val container = view.findViewById<LinearLayout>(R.id.unlockGateCards)
+        val available = unlockGateCardSpace(view)
+        // Fewer rows until the cards fit between the clock and the home button,
+        // on any screen size or font scale; cards that do not fit fall back to
+        // one line, then drop out.
+        var rowBudget = LockscreenCards.ROW_BUDGET
+        while (true) {
+            cardRenderer.render(
+                container = container,
+                placed = LockscreenCards.place(candidates, now, rowBudget),
+                pageIdFor = ::currentCardPage,
+                now = now,
+                interactive = interactive,
+                textColor = view.findViewById<TextView>(R.id.unlockGateClock).currentTextColor,
+                onStep = { cardId, pageId ->
+                    cardPages[cardId] = pageId
+                    renderCurrentLockscreenMessage()
+                },
+                onOpen = ::openCardTarget,
+                pendingTextFor = { cardId, pageId -> pendingCardActions["$cardId/$pageId"]?.takeIf { it.until > now }?.text },
+                onAction = ::runCardAction,
+            )
+            if (available == null || rowBudget == 0 || cardRenderer.touching) break
+            if (measuredHeight(container, view.width) <= available) break
+            rowBudget--
+        }
+        centerUnlockGateContent(view)
         scheduleCardRefresh(now)
+        // The first render can come before the overlay is laid out; fit again
+        // once sizes are known.
+        if (available == null && candidates.isNotEmpty()) {
+            view.post { if (view.isAttachedToWindow && view.height > 0) renderCurrentLockscreenMessage() }
+        }
+    }
+
+    private fun measuredHeight(
+        child: View,
+        parentWidth: Int,
+    ): Int {
+        if (child.visibility == View.GONE) return 0
+        child.measure(
+            View.MeasureSpec.makeMeasureSpec(parentWidth, View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        return child.measuredHeight
+    }
+
+    // The overlay's free height between the status bar and the home button.
+    private fun unlockGateRegion(view: View): Pair<Int, Int>? {
+        if (view.height == 0) return null
+        val statusBar = view.findViewById<View>(R.id.unlockGateStatusBar)
+        val homeButton = view.findViewById<View>(R.id.unlockGateHomeButton)
+        val top = if (statusBar.visibility == View.VISIBLE) statusBar.bottom else 0
+        val bottom = if (homeButton.visibility == View.VISIBLE && homeButton.top > 0) homeButton.top else view.height
+        return top to bottom
+    }
+
+    // Everything above and below the cards: the message or date, the clock,
+    // the media controls, and the gaps around them.
+    private fun unlockGateFixedHeights(view: View): Pair<Int, Int> {
+        val date = view.findViewById<View>(R.id.unlockGateDate)
+        val clock = view.findViewById<View>(R.id.unlockGateClock)
+        val media = view.findViewById<View>(R.id.unlockGateMediaControls)
+        val above = measuredHeight(date, view.width).let { if (it > 0) it + dp2px(resources, UNLOCK_GATE_DATE_GAP_DP) else 0 }
+        val clockHeight = measuredHeight(clock, view.width)
+        val below = measuredHeight(media, view.width).let { if (it > 0) it + 2 * dp2px(resources, UNLOCK_GATE_EDGE_GAP_DP) else 0 }
+        return (above + clockHeight) to below
+    }
+
+    private fun unlockGateCardSpace(view: View): Int? {
+        val (top, bottom) = unlockGateRegion(view) ?: return null
+        val (aboveCards, belowCards) = unlockGateFixedHeights(view)
+        return bottom - top - aboveCards - belowCards - dp2px(resources, UNLOCK_GATE_CARDS_GAP_DP) -
+            2 * dp2px(resources, UNLOCK_GATE_EDGE_GAP_DP)
+    }
+
+    // With cards showing, the message or date, the clock and the cards are
+    // centred as one group, so the clock moves up to make room. Without cards
+    // the clock stays in the middle, as before.
+    private fun centerUnlockGateContent(view: View) {
+        val clock = view.findViewById<TextView>(R.id.unlockGateClock)
+        val params = clock.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        val cards = view.findViewById<View>(R.id.unlockGateCards)
+        val region = unlockGateRegion(view)
+        var bias = 0.5f
+        if (region != null && cards.visibility == View.VISIBLE) {
+            val (top, bottom) = region
+            val date = view.findViewById<View>(R.id.unlockGateDate)
+            val above = measuredHeight(date, view.width).let { if (it > 0) it + dp2px(resources, UNLOCK_GATE_DATE_GAP_DP) else 0 }
+            val clockHeight = measuredHeight(clock, view.width)
+            val group =
+                above + clockHeight + dp2px(resources, UNLOCK_GATE_CARDS_GAP_DP) + measuredHeight(cards, view.width) +
+                    unlockGateFixedHeights(view).second
+            val clockTop = top + ((bottom - top - group) / 2).coerceAtLeast(dp2px(resources, UNLOCK_GATE_EDGE_GAP_DP)) + above
+            // The clock is constrained between the top of the overlay and the
+            // home button; bias places it within that span.
+            val span = bottom - clockHeight
+            if (span > 0) bias = (clockTop.toFloat() / span).coerceIn(0f, 0.5f)
+        }
+        if (kotlin.math.abs(params.verticalBias - bias) > 0.001f) {
+            params.verticalBias = bias
+            clock.layoutParams = params
+        }
     }
 
     // Cards as the server sent them, plus pages whose action is still showing
@@ -2992,9 +3080,9 @@ class ActionService : AccessibilityService() {
                 isFocusable = false
             }
         }
-        renderCards(view, visible = !isRinging, interactive = isInteractive)
         if (isRinging) {
             mediaControlsView.visibility = View.GONE
+            renderCards(view, visible = false, interactive = false)
             return
         }
         val mediaInfo = MediaSessionHelper.mediaInfo.value
@@ -3022,6 +3110,8 @@ class ActionService : AccessibilityService() {
         } else {
             mediaControlsView.visibility = View.GONE
         }
+        // Last, so the space the cards get accounts for the media controls.
+        renderCards(view, visible = true, interactive = isInteractive)
     }
 
     private fun resetUnlockGateViewState(view: View) {
@@ -3826,6 +3916,12 @@ class ActionService : AccessibilityService() {
         // How long a long-pressed card page shows e.g. "✓ Done", and can be
         // long-pressed again to undo.
         private const val CARD_ACTION_PENDING_MS = 4_000L
+
+        // Lock screen spacing used when fitting cards (dp): below the message
+        // or date, above the cards, and the least gap at the top and bottom.
+        private const val UNLOCK_GATE_DATE_GAP_DP = 30
+        private const val UNLOCK_GATE_CARDS_GAP_DP = 22
+        private const val UNLOCK_GATE_EDGE_GAP_DP = 24
         private const val VOLUME_INDICATOR_HIDE_DELAY_MS = 1500L
         private const val ICON_SCALE = 1.0f
         private const val UNLOCK_GATE_CLOCK_TEXT_SIZE_SP = 80f

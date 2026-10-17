@@ -65,6 +65,8 @@ import com.vandam.luma.data.AppModel
 import com.vandam.luma.data.Constants.Action
 import com.vandam.luma.data.GestureScope
 import com.vandam.luma.data.GestureType
+import com.vandam.luma.data.Glance
+import com.vandam.luma.data.GlanceManager
 import com.vandam.luma.data.LockscreenMessage
 import com.vandam.luma.data.LockscreenMessageManager
 import com.vandam.luma.data.Prefs
@@ -76,9 +78,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
@@ -158,6 +162,8 @@ class ActionService : AccessibilityService() {
     private var lockscreenMessageObserverJob: Job? = null
     private var lockscreenMessage: LockscreenMessage? = null
     private var lockscreenMessageExpiryRunnable: Runnable? = null
+    private var glances: List<Glance> = emptyList()
+    private var glanceExpiryRunnable: Runnable? = null
 
     override fun onServiceConnected() {
         configureServiceInfo()
@@ -264,6 +270,7 @@ class ActionService : AccessibilityService() {
 
     private fun startLockscreenMessageObserver() {
         lockscreenMessage = null
+        glances = emptyList()
         renderCurrentLockscreenMessage()
         val accountNumber = prefs.accountNumber
         if (accountNumber.isBlank()) return
@@ -273,11 +280,25 @@ class ActionService : AccessibilityService() {
         lockscreenMessageObserverJob =
             CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
                 try {
-                    LockscreenMessageManager.observe(client, accountNumber).collect { update ->
-                        val message = update?.takeIf { it.expiresAt > System.currentTimeMillis() }
-                        lockscreenMessage = message
-                        scheduleLockscreenMessageExpiry(message)
-                        renderCurrentLockscreenMessage()
+                    // Both subscriptions share the client. Its native calls run on
+                    // IO threads: resumed on the main thread, one subscription's
+                    // callback re-entered the client for the other and deadlocked.
+                    coroutineScope {
+                        launch {
+                            LockscreenMessageManager.observe(client, accountNumber).flowOn(Dispatchers.IO).collect { update ->
+                                val message = update?.takeIf { it.expiresAt > System.currentTimeMillis() }
+                                lockscreenMessage = message
+                                scheduleLockscreenMessageExpiry(message)
+                                renderCurrentLockscreenMessage()
+                            }
+                        }
+                        launch {
+                            GlanceManager.observe(client, accountNumber).flowOn(Dispatchers.IO).collect { update ->
+                                glances = update
+                                scheduleGlanceExpiry()
+                                renderCurrentLockscreenMessage()
+                            }
+                        }
                     }
                 } catch (exception: CancellationException) {
                     throw exception
@@ -294,6 +315,25 @@ class ActionService : AccessibilityService() {
         lockscreenMessageObserverJob = null
         lockscreenMessageExpiryRunnable?.let(mainHandler::removeCallbacks)
         lockscreenMessageExpiryRunnable = null
+        glanceExpiryRunnable?.let(mainHandler::removeCallbacks)
+        glanceExpiryRunnable = null
+    }
+
+    // Re-renders when the next visible glance expires, so the one behind it
+    // moves up.
+    private fun scheduleGlanceExpiry() {
+        glanceExpiryRunnable?.let(mainHandler::removeCallbacks)
+        glanceExpiryRunnable = null
+        val nextExpiry = GlanceManager.visible(glances).minOfOrNull { it.expiresAt.toLong() } ?: return
+
+        val runnable =
+            Runnable {
+                glanceExpiryRunnable = null
+                scheduleGlanceExpiry()
+                renderCurrentLockscreenMessage()
+            }
+        glanceExpiryRunnable = runnable
+        mainHandler.postDelayed(runnable, (nextExpiry - System.currentTimeMillis()).coerceAtLeast(0L))
     }
 
     private fun scheduleLockscreenMessageExpiry(message: LockscreenMessage?) {
@@ -2718,12 +2758,30 @@ class ActionService : AccessibilityService() {
         val textColor = if (isDark) Color.WHITE else Color.BLACK
         view.findViewById<TextView>(R.id.unlockGateClock).setTextColor(textColor)
         view.findViewById<TextView>(R.id.unlockGateDate).setTextColor(textColor)
+        view.findViewById<TextView>(R.id.unlockGateGlance1).setTextColor(textColor)
+        view.findViewById<TextView>(R.id.unlockGateGlance2).setTextColor(textColor)
         val iconTint = if (isDark) Color.WHITE else Color.BLACK
         for (id in listOf(R.id.unlockGateMediaPrev, R.id.unlockGateMediaPlayPause, R.id.unlockGateMediaStop, R.id.unlockGateMediaNext)) {
             val iv = view.findViewById<ImageView>(id)
             @Suppress("DEPRECATION")
             iv.setColorFilter(iconTint, PorterDuff.Mode.SRC_IN)
         }
+    }
+
+    private fun renderGlances(
+        view: View,
+        visible: Boolean,
+    ) {
+        val shown = if (visible && prefs.lockscreenGlances) GlanceManager.visible(glances) else emptyList()
+        listOf(R.id.unlockGateGlance1, R.id.unlockGateGlance2).forEachIndexed { index, id ->
+            view.findViewById<TextView>(id).apply {
+                val glance = shown.getOrNull(index)
+                text = glance?.text
+                visibility = if (glance != null) View.VISIBLE else View.GONE
+            }
+        }
+        view.findViewById<View>(R.id.unlockGateGlances).visibility =
+            if (shown.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun updateUnlockGateText(
@@ -2782,6 +2840,7 @@ class ActionService : AccessibilityService() {
                 isFocusable = false
             }
         }
+        renderGlances(view, visible = !isRinging)
         if (isRinging) {
             mediaControlsView.visibility = View.GONE
             return

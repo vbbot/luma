@@ -99,6 +99,7 @@ private const val LOCKSCREEN_CLOCK_TAP_APP = "lockscreen_clock_tap_app"
 private const val LOCKSCREEN_DATE_TAP_ACTION = "lockscreen_date_tap_action"
 private const val LOCKSCREEN_DATE_TAP_APP = "lockscreen_date_tap_app"
 private const val LOCKSCREEN_CLOCK_NOTIFICATION_INDICATOR = "lockscreen_clock_notification_indicator"
+private const val LOCKSCREEN_GLANCES = "lockscreen_glances"
 private const val LOCKSCREEN_SHORTCUT_ACTION = "lockscreen_shortcut_action"
 private const val LOCKSCREEN_SHORTCUT_APP = "lockscreen_shortcut_app"
 private const val LOCKSCREEN_SHORTCUT_ICON = "lockscreen_shortcut_icon"
@@ -494,6 +495,11 @@ class Prefs(
     var lockscreenClockNotificationIndicator: Boolean
         get() = prefs.getBoolean(LOCKSCREEN_CLOCK_NOTIFICATION_INDICATOR, true)
         set(value) = prefs.edit().putBoolean(LOCKSCREEN_CLOCK_NOTIFICATION_INDICATOR, value).apply()
+
+    // Dashboard integrations (weather, webhooks) under the lock screen clock.
+    var lockscreenGlances: Boolean
+        get() = prefs.getBoolean(LOCKSCREEN_GLANCES, true)
+        set(value) = prefs.edit().putBoolean(LOCKSCREEN_GLANCES, value).apply()
 
     fun getLockscreenShortcutAction(): Constants.Action {
         val action = loadAction(LOCKSCREEN_SHORTCUT_ACTION, Constants.Action.OpenApp)

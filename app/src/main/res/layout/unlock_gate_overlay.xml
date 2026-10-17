@@ -98,6 +98,30 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="0.5" />
 
+    <!-- Up to two lines from dashboard integrations (weather, webhooks). -->
+    <LinearLayout
+        android:id="@+id/unlockGateGlances"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="26dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/unlockGateClock">
+
+        <TextView
+            android:id="@+id/unlockGateGlance1"
+            style="@style/UnlockGateGlance" />
+
+        <TextView
+            android:id="@+id/unlockGateGlance2"
+            style="@style/UnlockGateGlance"
+            android:layout_marginTop="8dp" />
+
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/unlockGateMediaControls"
         android:layout_width="match_parent"
@@ -111,7 +135,7 @@
         app:layout_constraintBottom_toTopOf="@id/unlockGateHomeButton"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/unlockGateClock"
+        app:layout_constraintTop_toBottomOf="@id/unlockGateGlances"
         app:layout_constraintVertical_bias="0.44">
 
         <ImageView

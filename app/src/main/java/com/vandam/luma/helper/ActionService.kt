@@ -199,6 +199,9 @@ class ActionService : AccessibilityService() {
     // wake.
     private var currentCardId: String? = null
 
+    // Whose cards and message are held, so a different account starts clean.
+    private var lockscreenContentAccount: String? = null
+
     @Volatile
     private var cardClient: ConvexClient? = null
 
@@ -306,16 +309,30 @@ class ActionService : AccessibilityService() {
     }
 
     private fun startLockscreenMessageObserver() {
-        lockscreenMessage = null
         // Each wake starts cards on their first page, unless a card asks to
         // keep its place.
         val keepPlace = cards.filterNot { it.resetOnWake }.map { it.id }.toSet()
         cardPages.keys.retainAll(keepPlace)
         cardNextPages.keys.retainAll(keepPlace)
         currentCardId = null
-        cards = emptyList()
-        renderCurrentLockscreenMessage()
+        // The message and cards from last time stay up while the subscription
+        // reconnects, so the lock screen appears complete instead of filling in
+        // (and the clock jumping) a moment later. Expired ones are dropped when
+        // drawn. Starting fresh (or after a reboot), the saved copy stands in.
         val accountNumber = prefs.accountNumber
+        if (accountNumber != lockscreenContentAccount) {
+            lockscreenContentAccount = accountNumber
+            val hasAccount = accountNumber.isNotBlank()
+            cards = if (hasAccount) LockscreenCards.loadCache(this, accountNumber) else emptyList()
+            lockscreenMessage =
+                if (hasAccount) {
+                    LockscreenMessageManager.loadCache(this, accountNumber)?.takeIf { it.expiresAt > System.currentTimeMillis() }
+                } else {
+                    null
+                }
+            scheduleLockscreenMessageExpiry(lockscreenMessage)
+        }
+        renderCurrentLockscreenMessage()
         if (accountNumber.isBlank()) return
         val application = applicationContext as? LumaApplication ?: return
         val client = application.createConvexClient() ?: return
@@ -332,13 +349,15 @@ class ActionService : AccessibilityService() {
                             LockscreenMessageManager.observe(client, accountNumber).flowOn(Dispatchers.IO).collect { update ->
                                 val message = update?.takeIf { it.expiresAt > System.currentTimeMillis() }
                                 lockscreenMessage = message
+                                LockscreenMessageManager.saveCache(this@ActionService, accountNumber, message)
                                 scheduleLockscreenMessageExpiry(message)
                                 renderCurrentLockscreenMessage()
                             }
                         }
                         launch {
                             LockscreenCards.observe(client, accountNumber).flowOn(Dispatchers.IO).collect { update ->
-                                cards = update
+                                cards = update.cards
+                                LockscreenCards.saveCache(this@ActionService, accountNumber, update.json)
                                 renderCurrentLockscreenMessage()
                             }
                         }
@@ -2850,14 +2869,14 @@ class ActionService : AccessibilityService() {
                 onAction = ::runCardAction,
             )
             if (available == null || rowBudget < 0 || cardRenderer.touching) break
-            if (measuredHeight(container, view.width) <= available) break
+            if (measuredHeight(container, unlockGateWidth(view)) <= available) break
             rowBudget--
         }
         centerUnlockGateContent(view)
         scheduleCardRefresh(now)
         // The first render can come before the overlay is laid out; fit again
         // once sizes are known.
-        if (available == null && candidates.isNotEmpty()) {
+        if (view.height == 0 && candidates.isNotEmpty()) {
             view.post { if (view.isAttachedToWindow && view.height > 0) renderCurrentLockscreenMessage() }
         }
     }
@@ -2875,13 +2894,24 @@ class ActionService : AccessibilityService() {
     }
 
     // The overlay's free height between the status bar and the home button.
+    // A new lock screen view has no size until its first layout, but its
+    // first frame should already be placed right, so the last measurements
+    // stand in until then.
+    private var lastUnlockGateRegion: Pair<Int, Int>? = null
+    private var lastUnlockGateWidth = 0
+
+    private fun unlockGateWidth(view: View): Int {
+        if (view.width > 0) lastUnlockGateWidth = view.width
+        return lastUnlockGateWidth
+    }
+
     private fun unlockGateRegion(view: View): Pair<Int, Int>? {
-        if (view.height == 0) return null
+        if (view.height == 0) return lastUnlockGateRegion
         val statusBar = view.findViewById<View>(R.id.unlockGateStatusBar)
         val homeButton = view.findViewById<View>(R.id.unlockGateHomeButton)
         val top = if (statusBar.visibility == View.VISIBLE) statusBar.bottom else 0
         val bottom = if (homeButton.visibility == View.VISIBLE && homeButton.top > 0) homeButton.top else view.height
-        return top to bottom
+        return (top to bottom).also { lastUnlockGateRegion = it }
     }
 
     // Everything above and below the cards: the message or date, the clock,
@@ -2890,9 +2920,9 @@ class ActionService : AccessibilityService() {
         val date = view.findViewById<View>(R.id.unlockGateDate)
         val clock = view.findViewById<View>(R.id.unlockGateClock)
         val media = view.findViewById<View>(R.id.unlockGateMediaControls)
-        val above = measuredHeight(date, view.width).let { if (it > 0) it + dp2px(resources, UNLOCK_GATE_DATE_GAP_DP) else 0 }
-        val clockHeight = measuredHeight(clock, view.width)
-        val below = measuredHeight(media, view.width).let { if (it > 0) it + 2 * dp2px(resources, UNLOCK_GATE_EDGE_GAP_DP) else 0 }
+        val above = measuredHeight(date, unlockGateWidth(view)).let { if (it > 0) it + dp2px(resources, UNLOCK_GATE_DATE_GAP_DP) else 0 }
+        val clockHeight = measuredHeight(clock, unlockGateWidth(view))
+        val below = measuredHeight(media, unlockGateWidth(view)).let { if (it > 0) it + 2 * dp2px(resources, UNLOCK_GATE_EDGE_GAP_DP) else 0 }
         return (above + clockHeight) to below
     }
 
@@ -2915,10 +2945,10 @@ class ActionService : AccessibilityService() {
         if (region != null && cards.visibility == View.VISIBLE) {
             val (top, bottom) = region
             val date = view.findViewById<View>(R.id.unlockGateDate)
-            val above = measuredHeight(date, view.width).let { if (it > 0) it + dp2px(resources, UNLOCK_GATE_DATE_GAP_DP) else 0 }
-            val clockHeight = measuredHeight(clock, view.width)
+            val above = measuredHeight(date, unlockGateWidth(view)).let { if (it > 0) it + dp2px(resources, UNLOCK_GATE_DATE_GAP_DP) else 0 }
+            val clockHeight = measuredHeight(clock, unlockGateWidth(view))
             val group =
-                above + clockHeight + dp2px(resources, UNLOCK_GATE_CARDS_GAP_DP) + measuredHeight(cards, view.width) +
+                above + clockHeight + dp2px(resources, UNLOCK_GATE_CARDS_GAP_DP) + measuredHeight(cards, unlockGateWidth(view)) +
                     unlockGateFixedHeights(view).second
             val clockTop = top + ((bottom - top - group) / 2).coerceAtLeast(dp2px(resources, UNLOCK_GATE_EDGE_GAP_DP)) + above
             // The clock is constrained between the top of the overlay and the

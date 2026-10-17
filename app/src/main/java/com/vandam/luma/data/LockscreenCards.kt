@@ -1,5 +1,6 @@
 package com.vandam.luma.data
 
+import android.content.Context
 import android.util.Log
 import dev.convex.android.ConvexClient
 import kotlinx.coroutines.flow.Flow
@@ -112,11 +113,18 @@ object LockscreenCards {
     private const val LOG_TAG = "LockscreenCards"
     private const val QUERY_PATH = "lockscreen:getForDevice"
 
+    // Each update from the server: the cards, and the JSON they came from so
+    // the lock screen can keep a copy (see saveCache).
+    class Update(
+        val cards: List<LockscreenCard>,
+        val json: String,
+    )
+
     fun observe(
         client: ConvexClient,
         accountNumber: String,
-    ): Flow<List<LockscreenCard>> {
-        if (!accountNumber.matches(Regex("^\\d{16}$"))) return flowOf(emptyList())
+    ): Flow<Update> {
+        if (!accountNumber.matches(Regex("^\\d{16}$"))) return flowOf(Update(emptyList(), "[]"))
 
         return runCatching {
             client
@@ -130,7 +138,7 @@ object LockscreenCards {
                         ),
                 ).transform { result ->
                     result.fold(
-                        onSuccess = { cards -> emit(cards.mapNotNull(::parseCard)) },
+                        onSuccess = { cards -> emit(Update(cards.mapNotNull(::parseCard), JsonArray(cards).toString())) },
                         // Servers without lock screen integrations do not have this query.
                         onFailure = { error -> Log.w(LOG_TAG, "Card subscription failed", error) },
                     )
@@ -151,6 +159,40 @@ object LockscreenCards {
         cards
             .filter { it.expiresAt > now && it.validPages(now).isNotEmpty() }
             .sortedByDescending { it.isHighRelevance(now) }
+
+    // The last cards from the server, kept so the lock screen can show them
+    // the moment it appears (after a reboot too) instead of blank until the
+    // subscription answers. Stored per account; expiry is checked on every
+    // draw, so nothing outlives its expiresAt.
+    private const val CACHE_FILE = "com.vandam.luma.lockscreen_cache"
+    private const val CACHE_ACCOUNT = "account"
+    private const val CACHE_CARDS = "cards"
+    private val cacheJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+    fun saveCache(
+        context: Context,
+        accountNumber: String,
+        json: String,
+    ) {
+        context
+            .getSharedPreferences(CACHE_FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(CACHE_ACCOUNT, accountNumber)
+            .putString(CACHE_CARDS, json)
+            .apply()
+    }
+
+    fun loadCache(
+        context: Context,
+        accountNumber: String,
+    ): List<LockscreenCard> {
+        val prefs = context.getSharedPreferences(CACHE_FILE, Context.MODE_PRIVATE)
+        if (prefs.getString(CACHE_ACCOUNT, null) != accountNumber) return emptyList()
+        val json = prefs.getString(CACHE_CARDS, null) ?: return emptyList()
+        return runCatching {
+            cacheJson.decodeFromString<List<JsonObject>>(json).mapNotNull(::parseCard)
+        }.getOrDefault(emptyList())
+    }
 
     // Which of these cards to draw, within the row budget, from roomiest to
     // tightest: every block (a regular card takes 2 rows, compact 1), the

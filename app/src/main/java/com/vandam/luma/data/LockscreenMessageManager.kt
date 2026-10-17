@@ -16,6 +16,36 @@ data class LockscreenMessage(
 )
 
 object LockscreenMessageManager {
+    // The last message, kept like the cards (LockscreenCards.saveCache) so it
+    // shows the moment the lock screen appears.
+    private const val CACHE_FILE = "com.vandam.luma.lockscreen_cache"
+    private const val CACHE_ACCOUNT = "message_account"
+    private const val CACHE_MESSAGE = "message"
+    private val cacheJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+    fun saveCache(
+        context: android.content.Context,
+        accountNumber: String,
+        message: LockscreenMessage?,
+    ) {
+        context
+            .getSharedPreferences(CACHE_FILE, android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putString(CACHE_ACCOUNT, accountNumber)
+            .putString(CACHE_MESSAGE, message?.let { cacheJson.encodeToString(LockscreenMessage.serializer(), it) })
+            .apply()
+    }
+
+    fun loadCache(
+        context: android.content.Context,
+        accountNumber: String,
+    ): LockscreenMessage? {
+        val prefs = context.getSharedPreferences(CACHE_FILE, android.content.Context.MODE_PRIVATE)
+        if (prefs.getString(CACHE_ACCOUNT, null) != accountNumber) return null
+        val json = prefs.getString(CACHE_MESSAGE, null) ?: return null
+        return runCatching { cacheJson.decodeFromString(LockscreenMessage.serializer(), json) }.getOrNull()
+    }
+
     private const val LOG_TAG = "LockscreenMessage"
     private const val QUERY_PATH = "lockscreenMessages:getCurrentForDevice"
 

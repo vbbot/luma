@@ -1,12 +1,17 @@
 package com.vandam.luma.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.vandam.luma.R
@@ -25,6 +30,19 @@ class LockscreenFragment : Fragment() {
     private val notificationIndicatorState = mutableStateOf(true)
     private val dateFormatState = mutableStateOf(Prefs.LockscreenDateFormat.None)
     private val glancesState = mutableStateOf(true)
+    private val integrationNotificationsState = mutableStateOf(true)
+
+    // Android 13+ asks before an app may post notifications.
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            integrationNotificationsState.value = granted
+            prefs.integrationNotifications = granted
+        }
+
+    private fun canPostNotifications() =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
 
     override fun onResume() {
         super.onResume()
@@ -33,6 +51,7 @@ class LockscreenFragment : Fragment() {
         notificationIndicatorState.value = prefs.lockscreenClockNotificationIndicator
         dateFormatState.value = prefs.lockscreenDateFormat
         glancesState.value = prefs.lockscreenGlances
+        integrationNotificationsState.value = prefs.integrationNotifications && canPostNotifications()
     }
 
     override fun onCreateView(
@@ -93,6 +112,18 @@ class LockscreenFragment : Fragment() {
                 onValueChange = {
                     glancesState.value = it
                     prefs.lockscreenGlances = it
+                },
+            )
+            ToggleTextButton(
+                title = stringResource(R.string.lockscreen_integration_notifications),
+                checked = integrationNotificationsState.value,
+                onValueChange = { enabled ->
+                    if (enabled && !canPostNotifications()) {
+                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        integrationNotificationsState.value = enabled
+                        prefs.integrationNotifications = enabled
+                    }
                 },
             )
         }

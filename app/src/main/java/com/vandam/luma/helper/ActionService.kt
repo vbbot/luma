@@ -199,6 +199,10 @@ class ActionService : AccessibilityService() {
     // wake.
     private var currentCardId: String? = null
 
+    // A card (and page) to open on the next lock screen, from a tapped
+    // notification; applied after each wake's reset to the first card.
+    private var focusOnNextWake: Pair<String, String?>? = null
+
     // Whose cards and message are held, so a different account starts clean.
     private var lockscreenContentAccount: String? = null
 
@@ -206,6 +210,11 @@ class ActionService : AccessibilityService() {
     private var cardClient: ConvexClient? = null
 
     override fun onServiceConnected() {
+        // Alarms do not survive a reboot or reinstall: reschedule integration
+        // notifications from the saved cards.
+        prefs.accountNumber.takeIf { it.isNotBlank() }?.let { account ->
+            IntegrationNotifications.sync(this, LockscreenCards.loadCache(this, account))
+        }
         configureServiceInfo()
         registerUnlockGateReceiver()
         registerCameraAvailabilityCallback()
@@ -315,6 +324,11 @@ class ActionService : AccessibilityService() {
         cardPages.keys.retainAll(keepPlace)
         cardNextPages.keys.retainAll(keepPlace)
         currentCardId = null
+        focusOnNextWake?.let { (cardId, pageId) ->
+            currentCardId = cardId
+            if (pageId != null) cardPages[cardId] = pageId else cardPages.remove(cardId)
+            focusOnNextWake = null
+        }
         // The message and cards from last time stay up while the subscription
         // reconnects, so the lock screen appears complete instead of filling in
         // (and the clock jumping) a moment later. Expired ones are dropped when
@@ -358,6 +372,7 @@ class ActionService : AccessibilityService() {
                             LockscreenCards.observe(client, accountNumber).flowOn(Dispatchers.IO).collect { update ->
                                 cards = update.cards
                                 LockscreenCards.saveCache(this@ActionService, accountNumber, update.json)
+                                IntegrationNotifications.sync(this@ActionService, update.cards)
                                 renderCurrentLockscreenMessage()
                             }
                         }
@@ -2984,6 +2999,25 @@ class ActionService : AccessibilityService() {
             cardPages[next.id] = (if (delta > 0) nextPages.first() else nextPages.last()).id
         }
         renderCurrentLockscreenMessage()
+    }
+
+    // A tapped integration notification: the lock screen, on its card and page.
+    fun showCardOnLockScreen(
+        cardId: String,
+        pageId: String?,
+    ) {
+        runOnMainThread {
+            focusOnNextWake = cardId to pageId
+            // Already showing: apply it now; otherwise the lock screen picks it
+            // up as it appears.
+            if (lockscreenMessageObserverJob?.isActive == true) {
+                currentCardId = cardId
+                if (pageId != null) cardPages[cardId] = pageId else cardPages.remove(cardId)
+                focusOnNextWake = null
+                renderCurrentLockscreenMessage()
+            }
+            restoreUnlockGate()
+        }
     }
 
     // Tapping the header: straight to the next integration, on its start page.

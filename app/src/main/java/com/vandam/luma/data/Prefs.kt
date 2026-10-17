@@ -100,6 +100,7 @@ private const val LOCKSCREEN_DATE_TAP_ACTION = "lockscreen_date_tap_action"
 private const val LOCKSCREEN_DATE_TAP_APP = "lockscreen_date_tap_app"
 private const val LOCKSCREEN_CLOCK_NOTIFICATION_INDICATOR = "lockscreen_clock_notification_indicator"
 private const val LOCKSCREEN_GLANCES = "lockscreen_glances"
+private const val INTEGRATION_NOTIFICATIONS = "integration_notifications"
 private const val LOCKSCREEN_SHORTCUT_ACTION = "lockscreen_shortcut_action"
 private const val LOCKSCREEN_SHORTCUT_APP = "lockscreen_shortcut_app"
 private const val LOCKSCREEN_SHORTCUT_ICON = "lockscreen_shortcut_icon"
@@ -500,6 +501,11 @@ class Prefs(
     var lockscreenGlances: Boolean
         get() = prefs.getBoolean(LOCKSCREEN_GLANCES, true)
         set(value) = prefs.edit().putBoolean(LOCKSCREEN_GLANCES, value).apply()
+
+    // Notifications that integrations schedule (e.g. Habitica reminders).
+    var integrationNotifications: Boolean
+        get() = prefs.getBoolean(INTEGRATION_NOTIFICATIONS, true)
+        set(value) = prefs.edit().putBoolean(INTEGRATION_NOTIFICATIONS, value).apply()
 
     fun getLockscreenShortcutAction(): Constants.Action {
         val action = loadAction(LOCKSCREEN_SHORTCUT_ACTION, Constants.Action.OpenApp)

@@ -74,6 +74,18 @@ data class CardPage(
     fun isValidAt(now: Long) = (validFrom == null || validFrom <= now) && (validUntil == null || validUntil > now)
 }
 
+// A notification the card asks the phone to show at `at`
+// (helper/IntegrationNotifications.kt schedules them).
+data class CardNotificationSpec(
+    val id: String,
+    val at: Long,
+    val title: String,
+    val text: String?,
+    val pageId: String?,
+    val until: Long?,
+    val checkFirst: Boolean,
+)
+
 data class LockscreenCard(
     val id: String,
     val expiresAt: Long,
@@ -85,6 +97,7 @@ data class LockscreenCard(
     val resetOnWake: Boolean,
     val total: Int?,
     val pages: List<CardPage>,
+    val notifications: List<CardNotificationSpec> = emptyList(),
 ) {
     fun validPages(now: Long) = pages.filter { it.isValidAt(now) }
 
@@ -268,6 +281,7 @@ object LockscreenCards {
                 total = paging?.number("total")?.toInt(),
                 // A card with nothing drawable still shows its fallback.
                 pages = pages.ifEmpty { listOf(textPage(fallback)) },
+                notifications = (json["notifications"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::parseNotification) },
             )
         }.getOrElse { error ->
             Log.w(LOG_TAG, "Skipping a card that could not be read", error)
@@ -302,6 +316,21 @@ object LockscreenCards {
             blocks = blocks,
             open = open,
             primary = primary,
+        )
+    }
+
+    private fun parseNotification(json: JsonObject): CardNotificationSpec? {
+        val id = json.string("id") ?: return null
+        val at = json.number("at")?.toLong() ?: return null
+        val title = json.string("title") ?: return null
+        return CardNotificationSpec(
+            id = id,
+            at = at,
+            title = title,
+            text = json.string("text"),
+            pageId = json.string("pageId"),
+            until = json.number("until")?.toLong(),
+            checkFirst = json["checkFirst"]?.jsonPrimitive?.booleanOrNull == true,
         )
     }
 

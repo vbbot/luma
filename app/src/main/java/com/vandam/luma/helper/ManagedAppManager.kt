@@ -35,6 +35,7 @@ object ManagedAppManager {
     private const val LOG_TAG = "ManagedAppManager"
     private const val LIGHT_OS_PACKAGE_PREFIX = "com.lightos"
     private const val SYNC_INSTALLED_APPS_MUTATION = "accounts:syncInstalledApps"
+    private const val REMOVE_APP_MUTATION = "accounts:removeApp"
     private const val INSTALLED_APPS_SYNC_DEBOUNCE_MS = 1500L
     @Volatile
     private var installedAppsDashboardSyncPending = false
@@ -107,9 +108,16 @@ object ManagedAppManager {
                 }
         }
 
+        // Offer to install apps just added on the dashboard, and update installed
+        // ones. Apps whose install was cancelled install when tapped, rather than
+        // prompting again on every dashboard change.
         enabledIds
             .sorted()
-            .forEach { appId ->
+            .filter { appId ->
+                previousEnabledAppIds == null ||
+                    appId !in previousIds ||
+                    ManagedAppCatalog.fromId(appId)?.let { isPackageInstalled(appContext, it.packageName) } == true
+            }.forEach { appId ->
                 maybeEnqueueManagedAppInstallOrUpdate(
                     context = appContext,
                     appId = appId,
@@ -336,6 +344,39 @@ object ManagedAppManager {
         return true
     }
 
+    // Removes a dashboard app from the phone. An installed app is uninstalled,
+    // and the dashboard drops it when the installed apps are next reported;
+    // one that was never installed is removed from the dashboard directly.
+    fun removeManagedApp(
+        context: Context,
+        managedApp: ManagedApp,
+    ) {
+        val appContext = context.applicationContext
+        if (isPackageInstalled(appContext, managedApp.packageName)) {
+            uninstallApp(context, managedApp.packageName)
+            return
+        }
+
+        val accountNumber = Prefs.getInstance(appContext).accountNumber
+        val client = (appContext as? LumaApplication)?.convexClient
+        if (accountNumber.isBlank() || client == null) return
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    client.mutation<Unit?>(
+                        name = REMOVE_APP_MUTATION,
+                        args = mapOf("accountNumber" to accountNumber, "appId" to managedApp.id),
+                    )
+                }
+            }.onFailure { error ->
+                Log.w(LOG_TAG, "Failed to remove app from dashboard", error)
+                withContext(Dispatchers.Main.immediate) {
+                    showToast(appContext, appContext.getString(R.string.toast_unable_to_remove_app, managedApp.label))
+                }
+            }
+        }
+    }
+
     private fun processNext(
         context: Context,
         retryCurrentAction: Boolean = false,
@@ -385,6 +426,10 @@ object ManagedAppManager {
                     processNext(appContext)
                     return
                 }
+
+                // Android only shows the uninstall prompt over a visible app, so
+                // wait for Luma to come to the front (onResume retries).
+                if (!MainActivity.isLumaForeground()) return
 
                 awaitingExternalResult = true
                 scope.launch(Dispatchers.Main.immediate) {

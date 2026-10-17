@@ -35,9 +35,12 @@ import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.vandam.luma.R
+import com.vandam.luma.data.AppEntryType
 import com.vandam.luma.data.AppModel
 import com.vandam.luma.data.HomeItemsManager
+import com.vandam.luma.data.ManagedAppCatalog
 import com.vandam.luma.data.Prefs
+import com.vandam.luma.helper.ManagedAppManager
 import com.vandam.luma.helper.launchAppModel
 import com.vandam.luma.helper.performAppTapHapticFeedback
 import com.vandam.luma.helper.performHapticFeedback
@@ -134,6 +137,11 @@ class ReorderToolsFragment : Fragment() {
                             val index = entry.index
                             val itemKey = prefs.homeItemKey(appModel)
                             val isVisible = hiddenStates[itemKey] != true
+                            // Only apps added from the dashboard's App Store can be removed here.
+                            val managedApp =
+                                ManagedAppCatalog
+                                    .fromPackageName(appModel.appPackage)
+                                    ?.takeIf { appModel.entryType == AppEntryType.ManagedApp }
 
                             ReorderRow(
                                 appModel = appModel,
@@ -167,6 +175,10 @@ class ReorderToolsFragment : Fragment() {
                                 onMoveDown = {
                                     swapItems(items, index, index + 1)
                                 },
+                                onRemove =
+                                    managedApp?.let { app ->
+                                        { ManagedAppManager.removeManagedApp(context, app) }
+                                    },
                             )
                         }
 
@@ -252,6 +264,7 @@ class ReorderToolsFragment : Fragment() {
         onRename: () -> Unit,
         onMoveUp: () -> Unit,
         onMoveDown: () -> Unit,
+        onRemove: (() -> Unit)?,
     ) {
         val context = LocalContext.current
         val textColor = SettingsTheme.typography.pageButton.color
@@ -288,6 +301,20 @@ class ReorderToolsFragment : Fragment() {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(VisibilityEditIconSpacing),
                 ) {
+                    if (onRemove != null) {
+                        ReorderIconButton(
+                            iconRes = R.drawable.remove_circle_32px,
+                            enabled = true,
+                            tint = textColor,
+                            size = ReorderIconSize,
+                            iconSize = 28.dp,
+                            contentDescription = stringResource(R.string.content_desc_remove_app),
+                            onClick = {
+                                performHapticFeedback(context)
+                                onRemove()
+                            },
+                        )
+                    }
                     ReorderIconButton(
                         iconRes = if (visibleOnHome) R.drawable.visibility else R.drawable.visibility_off,
                         enabled = true,

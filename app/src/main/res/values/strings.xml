@@ -200,6 +200,7 @@
     <string name="onboarding_notifications_grant">Notifications</string>
     <string name="onboarding_write_settings_grant">Write Settings</string>
     <string name="onboarding_install_apps_grant">Install Apps</string>
+    <string name="onboarding_reminders_grant">Reminders</string>
     <string name="onboarding_continue">Continue</string>
 
     <!-- App picker -->

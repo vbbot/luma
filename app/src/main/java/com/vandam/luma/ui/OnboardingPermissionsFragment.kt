@@ -1,5 +1,7 @@
 package com.vandam.luma.ui
 
+import com.vandam.luma.helper.IntegrationNotifications
+import android.Manifest
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -36,6 +38,7 @@ class OnboardingPermissionsFragment : Fragment() {
     private val hasPhoneToolPermission = mutableStateOf(false)
     private val hasModifySystemSettingsPermission = mutableStateOf(false)
     private val hasInstallAppsPermission = mutableStateOf(false)
+    private val hasPostNotificationsPermission = mutableStateOf(false)
     private val isPermissionRecovery: Boolean
         get() = Prefs.getInstance(requireContext()).accountNumber.isNotBlank()
 
@@ -65,6 +68,12 @@ class OnboardingPermissionsFragment : Fragment() {
             hasPhoneToolPermission.value = PhoneSignalHelper.hasPhoneToolPermissions(requireContext())
         }
 
+    // Posting notifications, e.g. Habitica reminders from the dashboard.
+    private val postNotificationsLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            hasPostNotificationsPermission.value = IntegrationNotifications.canPost(requireContext())
+        }
+
     private val bluetoothPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
             hasBluetoothPermission.value = BluetoothStatusHelper.hasBluetoothConnectPermission(requireContext())
@@ -78,6 +87,7 @@ class OnboardingPermissionsFragment : Fragment() {
         hasModifySystemSettingsPermission.value = hasWriteSettingsPermission()
         hasInstallAppsPermission.value = ApkInstaller.canRequestPackageInstalls(requireContext())
         hasPhoneToolPermission.value = PhoneSignalHelper.hasPhoneToolPermissions(requireContext())
+        hasPostNotificationsPermission.value = IntegrationNotifications.canPost(requireContext())
     }
 
     override fun onCreateView(
@@ -94,7 +104,8 @@ class OnboardingPermissionsFragment : Fragment() {
                 hasPhoneToolPermission.value &&
                 hasNotificationPermission.value &&
                 hasModifySystemSettingsPermission.value &&
-                hasInstallAppsPermission.value
+                hasInstallAppsPermission.value &&
+                hasPostNotificationsPermission.value
 
         SettingsScreen(
             title = stringResource(R.string.onboarding_permissions_title),
@@ -163,6 +174,12 @@ class OnboardingPermissionsFragment : Fragment() {
                 enabled = !hasInstallAppsPermission.value,
             ) {
                 ApkInstaller.openUnknownSourcesSettings(requireContext())
+            }
+            SimpleTextButton(
+                title = stringResource(R.string.onboarding_reminders_grant),
+                enabled = !hasPostNotificationsPermission.value,
+            ) {
+                postNotificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }

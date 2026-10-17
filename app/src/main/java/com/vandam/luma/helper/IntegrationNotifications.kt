@@ -47,6 +47,12 @@ object IntegrationNotifications {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    // Android 13+ only lets apps post notifications once allowed (asked in
+    // onboarding, OnboardingPermissionsFragment).
+    fun canPost(context: Context) =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
     // One scheduled or posted notification. key = "cardId/notificationId".
     @Serializable
     data class Entry(
@@ -163,9 +169,7 @@ object IntegrationNotifications {
         context: Context,
         entry: Entry,
     ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!canPost(context)) {
             Log.w(LOG_TAG, "Notification permission not granted; skipping ${entry.key}")
             return
         }

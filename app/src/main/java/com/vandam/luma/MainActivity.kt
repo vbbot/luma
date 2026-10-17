@@ -14,11 +14,6 @@ import android.view.KeyEvent
 import android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
 import androidx.activity.OnBackPressedCallback
 import com.vandam.luma.helper.IntegrationNotifications
-import com.vandam.luma.data.LockscreenCards
-import androidx.core.content.ContextCompat
-import androidx.activity.result.contract.ActivityResultContracts
-import android.content.pm.PackageManager
-import android.Manifest
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.NotificationManagerCompat
@@ -64,25 +59,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
-    // Android 13+ asks before an app may post notifications. Integration
-    // reminders need it, so Luma asks once, the first time a lock screen card
-    // brings a notification; afterwards it is under Settings → Lockscreen.
-    private val notificationPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                LockscreenCards.loadCache(this, prefs.accountNumber).let { IntegrationNotifications.sync(this, it) }
-            }
-        }
-
-    private fun askForNotificationsIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (!prefs.integrationNotifications || prefs.askedNotificationPermission) return
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
-        val accountNumber = prefs.accountNumber.takeIf { it.isNotBlank() } ?: return
-        if (LockscreenCards.loadCache(this, accountNumber).none { it.notifications.isNotEmpty() }) return
-        prefs.askedNotificationPermission = true
-        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-    }
 
     private lateinit var prefs: Prefs
     private lateinit var navController: NavController
@@ -185,7 +161,6 @@ class MainActivity : AppCompatActivity() {
         updateSystemStatusBarVisibility(navController.currentDestination?.id)
         syncRepeatedHomeGateEligibility(navController.currentDestination?.id)
         ManagedAppManager.onResume(this)
-        askForNotificationsIfNeeded()
     }
 
     override fun onPause() {
@@ -303,7 +278,8 @@ class MainActivity : AppCompatActivity() {
             PhoneSignalHelper.hasPhoneToolPermissions(this) &&
             hasNotificationPermission &&
             hasWriteSettingsPermission &&
-            hasInstallAppsPermission
+            hasInstallAppsPermission &&
+            IntegrationNotifications.canPost(this)
     }
 
     private fun handleOnboardingBackFallback(destinationId: Int?) {

@@ -119,6 +119,9 @@ class ActionService : AccessibilityService() {
     private var shownAtUptimeMs: Long = 0L
     private var sawLightOsForegroundEvent = false
     private var hideMaskOnNextLightOsEvent = false
+    private var voipCallMaskLifted = false
+    private var voipCallMaskMissedChecks = 0
+    private var voipCallMaskCheckRunnable: Runnable? = null
     private var hardTimeoutRunnable: Runnable? = null
     private var deferredHideRunnable: Runnable? = null
     private var unlockGateView: View? = null
@@ -554,6 +557,7 @@ class ActionService : AccessibilityService() {
         val event = event ?: return
         val packageName = event.packageName?.toString() ?: return
         val eventType = event.eventType
+        val className = event.className?.toString()
 
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             DaltonizerManager.onWindowStateChanged(
@@ -581,6 +585,10 @@ class ActionService : AccessibilityService() {
                 if (packageName != this.packageName) {
                     clearPendingCameraOwner()
                 }
+            }
+
+            if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                handleVoipCallWindowOnMain(packageName, className)
             }
 
             if (packageName == LIGHT_OS_PACKAGE && isCallUiActive() && !keyguardManager.isDeviceLocked) {
@@ -622,6 +630,11 @@ class ActionService : AccessibilityService() {
     override fun onKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_UP && consumedMappedKeyUps.remove(event.keyCode)) {
             return true
+        }
+
+        // The call screen owns the keys (e.g. volume to silence the ringer) while the mask is lifted.
+        if (voipCallMaskLifted) {
+            return false
         }
 
         if (handleScrollwheelBrightnessKeyEvent(event)) {
@@ -1659,6 +1672,8 @@ class ActionService : AccessibilityService() {
     }
 
     private fun cancelUnlockGateOnMain(clearRepeatedHomeGateEligibility: Boolean = false) {
+        voipCallMaskLifted = false
+        cancelVoipCallMaskCheck()
         MediaSessionHelper.setTrackingEnabled(false)
         secureLockMaskGestureAttempt = 0
         unlockGateVolumeIndicatorVisible = false
@@ -1894,6 +1909,7 @@ class ActionService : AccessibilityService() {
                     when (intent?.action) {
                         Intent.ACTION_SCREEN_OFF -> {
                             runOnMainThread {
+                                restoreMaskAfterVoipCallOnMain("screen off", render = false)
                                 dispatchUnlockGateEventOnMain(
                                     UnlockGateEvent.ScreenOff(SystemClock.uptimeMillis()),
                                 )
@@ -1906,6 +1922,9 @@ class ActionService : AccessibilityService() {
                                 if (isCallUiActive() && !deviceLocked) {
                                     launchCallUiOnMain()
                                     return@runOnMainThread
+                                }
+                                if (deviceLocked && isVoipCallActiveWindow()) {
+                                    liftMaskForVoipCallOnMain("call screen in front on wake")
                                 }
                                 dispatchUnlockGateEventOnMain(
                                     UnlockGateEvent.ScreenOn(
@@ -1922,6 +1941,14 @@ class ActionService : AccessibilityService() {
                             runOnMainThread {
                                 if (isCallUiActive()) {
                                     launchCallUiOnMain()
+                                    return@runOnMainThread
+                                }
+                                if (voipCallMaskLifted) {
+                                    // Unlocked mid-call: leave the call screen in front, like a SIM call.
+                                    voipCallMaskLifted = false
+                                    cancelVoipCallMaskCheck()
+                                    Log.i(TAG, "VoIP call: device unlocked, dropping lock mask")
+                                    cancelUnlockGateOnMain()
                                     return@runOnMainThread
                                 }
                                 dispatchUnlockGateEventOnMain(
@@ -1965,6 +1992,83 @@ class ActionService : AccessibilityService() {
             unlockGateReceiver = null
         }
     }
+
+    private fun handleVoipCallWindowOnMain(
+        pkg: String,
+        className: String?,
+    ) {
+        val callActivity = VOIP_CALL_ACTIVITIES[pkg]
+        if (callActivity != null) {
+            if (className == callActivity) {
+                liftMaskForVoipCallOnMain("call activity in front")
+            }
+            return
+        }
+        if (!voipCallMaskLifted || pkg == packageName) return
+        val activePackage = activeWindowPackage() ?: return
+        if (activePackage !in VOIP_CALL_ACTIVITIES) {
+            restoreMaskAfterVoipCallOnMain("another window in front")
+        }
+    }
+
+    // These call activities only show over the keyguard while a call rings or is on, so seeing one
+    // in front of a locked device is the call signal. Telecom does not reliably see these VoIP calls.
+    private fun liftMaskForVoipCallOnMain(reason: String) {
+        if (voipCallMaskLifted) return
+        if (!keyguardManager.isKeyguardLocked) return
+        voipCallMaskLifted = true
+        voipCallMaskMissedChecks = 0
+        Log.i(TAG, "VoIP call detected ($reason); lifting lock mask, phase=${unlockGateStateMachine.state.phase}")
+        hideVolumeOnlyOverlay()
+        renderUnlockGateStateOnMain()
+        scheduleVoipCallMaskCheck()
+    }
+
+    private fun restoreMaskAfterVoipCallOnMain(
+        reason: String,
+        render: Boolean = true,
+    ) {
+        if (!voipCallMaskLifted) return
+        voipCallMaskLifted = false
+        cancelVoipCallMaskCheck()
+        Log.i(TAG, "VoIP call screen gone ($reason); restoring lock mask, phase=${unlockGateStateMachine.state.phase}")
+        if (render) {
+            renderUnlockGateStateOnMain()
+            publishUnlockGateState()
+        }
+    }
+
+    // Window events alone can miss the call screen leaving, so check the active window while lifted.
+    private fun scheduleVoipCallMaskCheck() {
+        cancelVoipCallMaskCheck()
+        voipCallMaskCheckRunnable =
+            Runnable {
+                voipCallMaskCheckRunnable = null
+                if (!voipCallMaskLifted) return@Runnable
+                if (isVoipCallActiveWindow()) {
+                    voipCallMaskMissedChecks = 0
+                } else {
+                    voipCallMaskMissedChecks++
+                }
+                if (voipCallMaskMissedChecks >= VOIP_CALL_MASK_MISSED_CHECKS_LIMIT) {
+                    restoreMaskAfterVoipCallOnMain("call screen no longer active")
+                } else {
+                    scheduleVoipCallMaskCheck()
+                }
+            }.also { runnable ->
+                mainHandler.postDelayed(runnable, VOIP_CALL_MASK_CHECK_MS)
+            }
+    }
+
+    private fun cancelVoipCallMaskCheck() {
+        voipCallMaskCheckRunnable?.let(mainHandler::removeCallbacks)
+        voipCallMaskCheckRunnable = null
+    }
+
+    private fun activeWindowPackage(): String? =
+        runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
+
+    private fun isVoipCallActiveWindow(): Boolean = activeWindowPackage() in VOIP_CALL_ACTIVITIES
 
     private fun configureServiceInfo() {
         serviceInfo =
@@ -2017,6 +2121,14 @@ class ActionService : AccessibilityService() {
         if (state.phase == UnlockGatePhase.Idle) {
             MediaSessionHelper.setTrackingEnabled(false)
             cancelUnlockGateCallbacks()
+            stopUnlockGateStatusBarMonitors()
+            removeUnlockGateViewOnMain()
+            return true
+        }
+
+        if (voipCallMaskLifted) {
+            // Keep the phase so the mask comes back as it was once the call screen leaves.
+            cancelUnlockGateClockTick()
             stopUnlockGateStatusBarMonitors()
             removeUnlockGateViewOnMain()
             return true
@@ -4020,6 +4132,19 @@ class ActionService : AccessibilityService() {
         private const val TAG = "LumaActionService"
         private const val LIGHT_OS_PACKAGE = "com.lightos"
         private const val ZERO_PACKAGE = "com.vandam.zero"
+        private const val WHATSAPP_LIGHT_CALL_ACTIVITY = "vbh.ai.whatsapp.MainActivity"
+        private const val MOLLY_LIGHT_CALL_ACTIVITY = "org.thoughtcrime.securesms.components.webrtc.v2.WebRtcCallActivity"
+
+        // VoIP apps whose call activity only shows over the keyguard while a call rings or is on.
+        private val VOIP_CALL_ACTIVITIES =
+            mapOf(
+                "vbh.ai.whatsapp" to WHATSAPP_LIGHT_CALL_ACTIVITY,
+                "vbh.ai.whatsapp.debug" to WHATSAPP_LIGHT_CALL_ACTIVITY,
+                "im.molly.app" to MOLLY_LIGHT_CALL_ACTIVITY,
+                "im.molly.app.staging" to MOLLY_LIGHT_CALL_ACTIVITY,
+            )
+        private const val VOIP_CALL_MASK_CHECK_MS = 1000L
+        private const val VOIP_CALL_MASK_MISSED_CHECKS_LIMIT = 2
         private const val CAMERA_OWNER_PENDING_WINDOW_MS = 2000L
         private const val MIN_MASK_VISIBILITY_MS = 200L
         private const val HARD_TIMEOUT_MS = 900L

@@ -129,6 +129,8 @@ class ActionService : AccessibilityService() {
     private var unlockGateDismissRunnable: Runnable? = null
     private var unlockGateClockRunnable: Runnable? = null
     private var unlockGateReceiver: BroadcastReceiver? = null
+    private var scrollwheelClaimReceiver: BroadcastReceiver? = null
+    private var scrollwheelClaimedBy: String? = null
     private var unlockGateBatteryReceiver: BroadcastReceiver? = null
     private var unlockGateBluetoothReceiver: BroadcastReceiver? = null
     private var unlockGateWifiNetworkCallback: ConnectivityManager.NetworkCallback? = null
@@ -220,6 +222,7 @@ class ActionService : AccessibilityService() {
         }
         configureServiceInfo()
         registerUnlockGateReceiver()
+        registerScrollwheelClaimReceiver()
         registerCameraAvailabilityCallback()
         registerTorchCallback()
         MediaSessionHelper.init(this)
@@ -248,6 +251,7 @@ class ActionService : AccessibilityService() {
         unregisterCameraAvailabilityCallback()
         unregisterTorchCallback()
         unregisterUnlockGateReceiver()
+        unregisterScrollwheelClaimReceiver()
         stopMediaInfoObserver()
         stopLockscreenMessageObserver()
         stopIncomingCallMonitor()
@@ -273,6 +277,7 @@ class ActionService : AccessibilityService() {
         unregisterCameraAvailabilityCallback()
         unregisterTorchCallback()
         unregisterUnlockGateReceiver()
+        unregisterScrollwheelClaimReceiver()
         stopMediaInfoObserver()
         stopLockscreenMessageObserver()
         stopIncomingCallMonitor()
@@ -634,6 +639,10 @@ class ActionService : AccessibilityService() {
 
         // The call screen owns the keys (e.g. volume to silence the ringer) while the mask is lifted.
         if (voipCallMaskLifted) {
+            return false
+        }
+
+        if (shouldPassScrollwheelToClaimingApp(event)) {
             return false
         }
 
@@ -1038,6 +1047,75 @@ class ActionService : AccessibilityService() {
             else -> {
                 false
             }
+        }
+    }
+
+    private fun shouldPassScrollwheelToClaimingApp(event: KeyEvent): Boolean {
+        if (event.keyCode != SCROLLWHEEL_BRIGHTNESS_UP_KEY_CODE &&
+            event.keyCode != SCROLLWHEEL_BRIGHTNESS_DOWN_KEY_CODE &&
+            event.keyCode != SCROLLWHEEL_BUTTON_KEY_CODE
+        ) {
+            return false
+        }
+        val claimedBy = scrollwheelClaimedBy ?: return false
+        // A claim only counts while that app is in front and never on the lock screen.
+        if (claimedBy != currentForegroundPackage || isLumaForeground()) return false
+        if (unlockGateStateMachine.state.phase != UnlockGatePhase.Idle || keyguardManager.isKeyguardLocked) return false
+
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            consumedMappedKeyUps.remove(event.keyCode)
+        }
+        if (event.keyCode == SCROLLWHEEL_BUTTON_KEY_CODE) {
+            mainHandler.removeCallbacksAndMessages(SCROLLWHEEL_BUTTON_KEY_CODE)
+            scrollwheelKeyDownTime = 0L
+            scrollwheelLongPressFired = false
+            scrollwheelButtonPassThroughActive = false
+            scrollwheelButtonPassThroughInterrupted = false
+        }
+        return true
+    }
+
+    private fun registerScrollwheelClaimReceiver() {
+        if (scrollwheelClaimReceiver != null) return
+
+        scrollwheelClaimReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    context: Context?,
+                    intent: Intent?,
+                ) {
+                    if (intent?.action != ACTION_SCROLLWHEEL) return
+                    val claimingPackage = intent.getStringExtra(EXTRA_SCROLLWHEEL_PACKAGE)?.takeIf { it.isNotBlank() } ?: return
+                    val claim = intent.getBooleanExtra(EXTRA_SCROLLWHEEL_CLAIM, false)
+                    runOnMainThread {
+                        if (claim) {
+                            scrollwheelClaimedBy = claimingPackage
+                            Log.i(TAG, "Scroll wheel claimed by $claimingPackage")
+                        } else if (scrollwheelClaimedBy == claimingPackage) {
+                            scrollwheelClaimedBy = null
+                            Log.i(TAG, "Scroll wheel released by $claimingPackage")
+                        }
+                    }
+                }
+            }
+
+        ContextCompat.registerReceiver(
+            this,
+            scrollwheelClaimReceiver,
+            IntentFilter(ACTION_SCROLLWHEEL),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
+    }
+
+    private fun unregisterScrollwheelClaimReceiver() {
+        val receiver = scrollwheelClaimReceiver ?: return
+        try {
+            unregisterReceiver(receiver)
+        } catch (exception: Exception) {
+            Log.e(TAG, "unregisterScrollwheelClaimReceiver: failed", exception)
+        } finally {
+            scrollwheelClaimReceiver = null
+            scrollwheelClaimedBy = null
         }
     }
 
@@ -4181,6 +4259,9 @@ class ActionService : AccessibilityService() {
         private const val SCROLLWHEEL_BRIGHTNESS_UP_KEY_CODE = 317
         private const val SCROLLWHEEL_BRIGHTNESS_DOWN_KEY_CODE = 318
         private const val SCROLLWHEEL_BUTTON_KEY_CODE = 319
+        private const val ACTION_SCROLLWHEEL = "com.vandam.luma.action.SCROLLWHEEL"
+        private const val EXTRA_SCROLLWHEEL_PACKAGE = "package"
+        private const val EXTRA_SCROLLWHEEL_CLAIM = "claim"
         private const val CAMERA_KEY_CODE = 27
         private const val KEYMAP_LONG_PRESS_MS = 450L
         private const val HOME_RESTART_HOLD_MS = 10_000L

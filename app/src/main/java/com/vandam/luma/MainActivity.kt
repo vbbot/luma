@@ -75,6 +75,7 @@ class MainActivity : AppCompatActivity() {
     private var lastSyncedManagedAppIds: List<String>? = null
     private var lastSyncedAndroidApps: List<AndroidLauncherApp>? = null
     private var lastRequestedAppUpdateVersions: Map<String, String>? = null
+    private var lastUiMode = Configuration.UI_MODE_TYPE_UNDEFINED
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(newBase.withDisplayDefaults())
@@ -95,6 +96,7 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
 
         super.onCreate(savedInstanceState)
+        lastUiMode = resources.configuration.uiMode
         binding = ActivityMainBinding.inflate(layoutInflater)
         val view = binding.root
         setContentView(view)
@@ -205,6 +207,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        // Luma pins its own density, so a density change from DensityManager needs no restart.
+        if (newConfig.uiMode == lastUiMode) return
+        lastUiMode = newConfig.uiMode
         recreate()
     }
 

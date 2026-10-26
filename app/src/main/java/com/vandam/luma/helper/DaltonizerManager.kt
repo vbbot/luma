@@ -70,7 +70,7 @@ object DaltonizerManager {
         }
     }
 
-    private fun isTransientOverlay(
+    fun isTransientOverlay(
         context: Context,
         packageName: String,
     ): Boolean {

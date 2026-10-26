@@ -232,6 +232,7 @@ class ActionService : AccessibilityService() {
         syncLockscreenMessageObserver()
         startIncomingCallMonitor()
         DaltonizerManager.recoverFromProcessDeath(this)
+        DensityManager.recoverFromProcessDeath(this)
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -256,6 +257,7 @@ class ActionService : AccessibilityService() {
         stopLockscreenMessageObserver()
         stopIncomingCallMonitor()
         DaltonizerManager.restoreIfNeeded(this)
+        DensityManager.restoreIfNeeded(this)
         instance = WeakReference(null)
         return super.onUnbind(intent)
     }
@@ -282,6 +284,7 @@ class ActionService : AccessibilityService() {
         stopLockscreenMessageObserver()
         stopIncomingCallMonitor()
         DaltonizerManager.restoreIfNeeded(this)
+        DensityManager.restoreIfNeeded(this)
         instance = WeakReference(null)
         super.onDestroy()
     }
@@ -565,14 +568,21 @@ class ActionService : AccessibilityService() {
         val className = event.className?.toString()
 
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val isLumaTransientOverlay =
+                packageName == this.packageName &&
+                    !MainActivity.isLumaForeground() &&
+                    isVolumeOnlyOverlayVisible()
             DaltonizerManager.onWindowStateChanged(
                 this,
                 packageName,
                 prefs.colorApps,
-                isLumaTransientOverlay =
-                    packageName == this.packageName &&
-                        !MainActivity.isLumaForeground() &&
-                        isVolumeOnlyOverlayVisible(),
+                isLumaTransientOverlay = isLumaTransientOverlay,
+            )
+            DensityManager.onWindowStateChanged(
+                this,
+                packageName,
+                prefs.densityApps,
+                isLumaTransientOverlay = isLumaTransientOverlay,
             )
         }
 
@@ -630,6 +640,7 @@ class ActionService : AccessibilityService() {
         hideVolumeOnlyOverlay()
         secureLockMaskGestureAttempt = 0
         DaltonizerManager.restoreIfNeeded(this)
+        DensityManager.restoreIfNeeded(this)
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -1638,10 +1649,12 @@ class ActionService : AccessibilityService() {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return try {
             DaltonizerManager.onAppLaunch(this, pkg, prefs.colorApps)
+            DensityManager.onAppLaunch(this, pkg, prefs.densityApps)
             startActivity(intent)
             true
         } catch (_: Exception) {
             DaltonizerManager.restoreIfNeeded(this)
+            DensityManager.restoreIfNeeded(this)
             false
         }
     }

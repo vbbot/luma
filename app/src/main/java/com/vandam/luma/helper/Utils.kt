@@ -150,10 +150,12 @@ fun launchAppModel(
     if (appActivityName.isNotEmpty()) {
         val storedComponent = ComponentName(packageName, appActivityName)
         DaltonizerManager.onAppLaunch(appContext, packageName, Prefs.getInstance(appContext).colorApps)
+        DensityManager.onAppLaunch(appContext, packageName, Prefs.getInstance(appContext).densityApps)
         if (startMainActivity(launcher, storedComponent, userHandle)) {
             return true
         }
         DaltonizerManager.restoreIfNeeded(appContext)
+        DensityManager.restoreIfNeeded(appContext)
     }
 
     val activityInfo = launcher.getActivityList(packageName, userHandle)
@@ -174,8 +176,10 @@ fun launchAppModel(
         }
 
     DaltonizerManager.onAppLaunch(appContext, packageName, Prefs.getInstance(appContext).colorApps)
+    DensityManager.onAppLaunch(appContext, packageName, Prefs.getInstance(appContext).densityApps)
     if (!startMainActivity(launcher, component, userHandle)) {
         DaltonizerManager.restoreIfNeeded(appContext)
+        DensityManager.restoreIfNeeded(appContext)
         showToast(appContext, appContext.getString(R.string.toast_unable_to_launch_app))
     }
     return true

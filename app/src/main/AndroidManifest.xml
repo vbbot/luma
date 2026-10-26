@@ -37,7 +37,7 @@
 
         <activity
             android:name="com.vandam.luma.MainActivity"
-            android:configChanges="uiMode"
+            android:configChanges="uiMode|density|screenSize|smallestScreenSize|screenLayout"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
             android:taskAffinity=""

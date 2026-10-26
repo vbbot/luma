@@ -92,6 +92,12 @@ class GeneralFragment : Fragment() {
                     navController.navigate(R.id.action_generalFragment_to_colourAppsFragment)
                 }
             }
+            SimpleTextButton(stringResource(R.string.settings_density_apps)) {
+                val navController = findNavController()
+                if (navController.currentDestination?.id == R.id.generalFragment) {
+                    navController.navigate(R.id.action_generalFragment_to_densityAppsFragment)
+                }
+            }
             SimpleTextButton(stringResource(R.string.settings_haptics)) {
                 val navController = findNavController()
                 if (navController.currentDestination?.id == R.id.generalFragment) {

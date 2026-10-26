@@ -70,6 +70,7 @@ override fun onPause() {
 Notes:
 - Only one app holds the claim. A release only clears it when it comes from the app that holds it.
 - A claim only counts while that app is in front. Switching apps, returning to Luma or locking the phone gives the wheel back to Luma straight away.
+- On the lock screen a claim only counts while that app's call screen is showing over it (supported call apps: WhatsApp Light and Molly), so a call can be answered with the wheel.
 - No permission is needed. Luma must be running (its accessibility service enabled) to receive the broadcast.
 
 To test from a computer, then watch `adb logcat -s LumaActionService` for `Scroll wheel claimed by …`:

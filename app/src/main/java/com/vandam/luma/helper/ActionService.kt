@@ -639,10 +639,14 @@ class ActionService : AccessibilityService() {
 
         // The call screen owns the keys (e.g. volume to silence the ringer) while the mask is lifted.
         if (voipCallMaskLifted) {
+            if (isScrollwheelKey(event.keyCode)) {
+                releaseScrollwheelKeyToApp(event)
+            }
             return false
         }
 
         if (shouldPassScrollwheelToClaimingApp(event)) {
+            releaseScrollwheelKeyToApp(event)
             return false
         }
 
@@ -1050,29 +1054,39 @@ class ActionService : AccessibilityService() {
         }
     }
 
-    private fun shouldPassScrollwheelToClaimingApp(event: KeyEvent): Boolean {
-        if (event.keyCode != SCROLLWHEEL_BRIGHTNESS_UP_KEY_CODE &&
-            event.keyCode != SCROLLWHEEL_BRIGHTNESS_DOWN_KEY_CODE &&
-            event.keyCode != SCROLLWHEEL_BUTTON_KEY_CODE
-        ) {
-            return false
-        }
-        val claimedBy = scrollwheelClaimedBy ?: return false
-        // A claim only counts while that app is in front and never on the lock screen.
-        if (claimedBy != currentForegroundPackage || isLumaForeground()) return false
-        if (unlockGateStateMachine.state.phase != UnlockGatePhase.Idle || keyguardManager.isKeyguardLocked) return false
+    private fun isScrollwheelKey(keyCode: Int): Boolean =
+        keyCode == SCROLLWHEEL_BRIGHTNESS_UP_KEY_CODE ||
+            keyCode == SCROLLWHEEL_BRIGHTNESS_DOWN_KEY_CODE ||
+            keyCode == SCROLLWHEEL_BUTTON_KEY_CODE
 
+    private fun shouldPassScrollwheelToClaimingApp(event: KeyEvent): Boolean {
+        if (!isScrollwheelKey(event.keyCode)) return false
+        val claimedBy = scrollwheelClaimedBy ?: return false
+        // On the lock screen a claim only counts while that app's call screen is in front.
+        if (keyguardManager.isKeyguardLocked) {
+            return claimedBy in VOIP_CALL_ACTIVITIES && activeWindowPackage() == claimedBy
+        }
+        // Otherwise it counts while that app is in front and the unlock gate is not up.
+        if (claimedBy != currentForegroundPackage || isLumaForeground()) return false
+        return unlockGateStateMachine.state.phase == UnlockGatePhase.Idle
+    }
+
+    // Drop Luma's state for a wheel key now going to the app, so no stale key-up or long-press fires later.
+    private fun releaseScrollwheelKeyToApp(event: KeyEvent) {
         if (event.action == KeyEvent.ACTION_DOWN) {
             consumedMappedKeyUps.remove(event.keyCode)
         }
         if (event.keyCode == SCROLLWHEEL_BUTTON_KEY_CODE) {
-            mainHandler.removeCallbacksAndMessages(SCROLLWHEEL_BUTTON_KEY_CODE)
-            scrollwheelKeyDownTime = 0L
-            scrollwheelLongPressFired = false
-            scrollwheelButtonPassThroughActive = false
-            scrollwheelButtonPassThroughInterrupted = false
+            cancelScrollwheelButtonPress()
         }
-        return true
+    }
+
+    private fun cancelScrollwheelButtonPress() {
+        mainHandler.removeCallbacksAndMessages(SCROLLWHEEL_BUTTON_KEY_CODE)
+        scrollwheelKeyDownTime = 0L
+        scrollwheelLongPressFired = false
+        scrollwheelButtonPassThroughActive = false
+        scrollwheelButtonPassThroughInterrupted = false
     }
 
     private fun registerScrollwheelClaimReceiver() {
@@ -2096,6 +2110,8 @@ class ActionService : AccessibilityService() {
         if (!keyguardManager.isKeyguardLocked) return
         voipCallMaskLifted = true
         voipCallMaskMissedChecks = 0
+        // A wheel press held when the call screen appeared must not fire its long-press later.
+        cancelScrollwheelButtonPress()
         Log.i(TAG, "VoIP call detected ($reason); lifting lock mask, phase=${unlockGateStateMachine.state.phase}")
         hideVolumeOnlyOverlay()
         renderUnlockGateStateOnMain()

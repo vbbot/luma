@@ -47,6 +47,7 @@ import com.vandam.luma.data.Prefs
 import com.vandam.luma.data.Tool
 import com.vandam.luma.helper.ActionService
 import com.vandam.luma.helper.DaltonizerManager
+import com.vandam.luma.helper.DensityManager
 import com.vandam.luma.helper.LumaNotificationListener
 import com.vandam.luma.helper.LumaNotificationListener.Companion.isPersistent
 import com.vandam.luma.helper.PhoneNotificationSummary
@@ -301,6 +302,11 @@ class NotificationListFragment : Fragment() {
                                 item.packageName,
                                 Prefs.getInstance(appContext).colorApps,
                             )
+                            DensityManager.onAppLaunch(
+                                appContext,
+                                item.packageName,
+                                Prefs.getInstance(appContext).densityApps,
+                            )
                             val opened =
                                 try {
                                     if (item.contentIntent != null) {
@@ -340,6 +346,7 @@ class NotificationListFragment : Fragment() {
                                     } == true
                                 if (!fallbackOpened) {
                                     DaltonizerManager.restoreIfNeeded(appContext)
+                                    DensityManager.restoreIfNeeded(appContext)
                                 }
                             }
                         },

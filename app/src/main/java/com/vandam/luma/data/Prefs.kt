@@ -34,6 +34,7 @@ private const val APP_ACTIVITY = "APP_ACTIVITY"
 private const val APP_USER_SERIAL = "APP_USER_SERIAL"
 private const val APP_ENTRY_TYPE = "APP_ENTRY_TYPE"
 private const val COLOR_APPS = "COLOR_APPS"
+private const val DENSITY_APPS = "DENSITY_APPS"
 
 enum class GestureType(
     val actionKey: String,
@@ -733,6 +734,17 @@ class Prefs(
     var colorApps: Set<String>
         get() = prefs.getStringSet(COLOR_APPS, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(COLOR_APPS, value).apply()
+
+    /** Smallest width in dp per app package, for apps shown at their own display density. */
+    var densityApps: Map<String, Int>
+        get() =
+            (prefs.getStringSet(DENSITY_APPS, emptySet()) ?: emptySet())
+                .mapNotNull { entry ->
+                    val packageName = entry.substringBeforeLast('|')
+                    val width = entry.substringAfterLast('|').toIntOrNull()
+                    if (packageName.isBlank() || width == null) null else packageName to width
+                }.toMap()
+        set(value) = prefs.edit().putStringSet(DENSITY_APPS, value.map { "${it.key}|${it.value}" }.toSet()).apply()
 
     fun homeItemKey(
         appPackage: String,

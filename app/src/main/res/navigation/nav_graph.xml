@@ -214,6 +214,30 @@
         <action
             android:id="@+id/action_generalFragment_to_hapticsFragment"
             app:destination="@id/hapticsFragment" />
+        <action
+            android:id="@+id/action_generalFragment_to_densityAppsFragment"
+            app:destination="@id/densityAppsFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/densityAppsFragment"
+        android:name="com.vandam.luma.ui.DensityAppsFragment"
+        android:label="DensityAppsFragment">
+        <action
+            android:id="@+id/action_densityAppsFragment_to_densityAppFragment"
+            app:destination="@id/densityAppFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/densityAppFragment"
+        android:name="com.vandam.luma.ui.DensityAppFragment"
+        android:label="DensityAppFragment">
+        <argument
+            android:name="app_package"
+            app:argType="string"
+            android:defaultValue="" />
+        <argument
+            android:name="app_name"
+            app:argType="string"
+            android:defaultValue="" />
     </fragment>
     <fragment
         android:id="@+id/colourAppsFragment"

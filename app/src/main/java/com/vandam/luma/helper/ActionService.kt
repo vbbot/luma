@@ -1666,9 +1666,11 @@ class ActionService : AccessibilityService() {
                 ?.let { ComponentName.unflattenFromString(it)?.packageName }
         }.getOrNull()
 
+    // Only managed (SIM) calls count: LightOS's call screen cannot show self-managed VoIP calls,
+    // which TelecomManager.isInCall and TelephonyManager.callState also report on this device.
     private fun isInCall(): Boolean =
         try {
-            getSystemService(TelecomManager::class.java)?.isInCall == true
+            getSystemService(TelecomManager::class.java)?.isInManagedCall == true
         } catch (_: SecurityException) {
             false
         }
@@ -1676,8 +1678,11 @@ class ActionService : AccessibilityService() {
     private fun isPhoneRinging(): Boolean =
         try {
             @Suppress("DEPRECATION")
-            getSystemService(TelephonyManager::class.java)?.callState == TelephonyManager.CALL_STATE_RINGING ||
-                (getSystemService(TelecomManager::class.java)?.isInCall == true && audioManager.mode == AudioManager.MODE_RINGTONE)
+            isInCall() &&
+                (
+                    getSystemService(TelephonyManager::class.java)?.callState == TelephonyManager.CALL_STATE_RINGING ||
+                        audioManager.mode == AudioManager.MODE_RINGTONE
+                )
         } catch (_: SecurityException) {
             false
         }
@@ -4028,6 +4033,10 @@ class ActionService : AccessibilityService() {
     }
 
     private fun handleIncomingRinging() {
+        if (!isInCall()) {
+            Log.i(TAG, "Ringing without a managed call (self-managed VoIP); leaving LightOS call screen closed")
+            return
+        }
         if (keyguardManager.isDeviceLocked) {
             refreshLockedCallOverlay()
             return

@@ -1666,26 +1666,42 @@ class ActionService : AccessibilityService() {
                 ?.let { ComponentName.unflattenFromString(it)?.packageName }
         }.getOrNull()
 
-    // Only managed (SIM) calls count: LightOS's call screen cannot show self-managed VoIP calls,
-    // which TelecomManager.isInCall and TelephonyManager.callState also report on this device.
+    // Only cellular calls count: LightOS's call screen cannot show self-managed VoIP calls, which
+    // TelecomManager.isInCall and TelephonyManager.callState also report on this device.
+    // isInManagedCall alone misses a ringing call, so the SIM's own call state covers that.
     private fun isInCall(): Boolean =
-        try {
-            getSystemService(TelecomManager::class.java)?.isInManagedCall == true
-        } catch (_: SecurityException) {
-            false
-        }
+        cellularCallState() != TelephonyManager.CALL_STATE_IDLE ||
+            try {
+                getSystemService(TelecomManager::class.java)?.isInManagedCall == true
+            } catch (_: SecurityException) {
+                false
+            }
 
-    private fun isPhoneRinging(): Boolean =
-        try {
-            @Suppress("DEPRECATION")
-            isInCall() &&
-                (
-                    getSystemService(TelephonyManager::class.java)?.callState == TelephonyManager.CALL_STATE_RINGING ||
-                        audioManager.mode == AudioManager.MODE_RINGTONE
-                )
+    private fun isPhoneRinging(): Boolean = cellularCallState() == TelephonyManager.CALL_STATE_RINGING
+
+    private fun cellularCallState(): Int {
+        val telephonyManager = getSystemService(TelephonyManager::class.java) ?: return TelephonyManager.CALL_STATE_IDLE
+        return try {
+            val subscriptionIds =
+                getSystemService(SubscriptionManager::class.java)
+                    ?.activeSubscriptionInfoList
+                    ?.map { it.subscriptionId }
+                    .orEmpty()
+            val states =
+                if (subscriptionIds.isEmpty()) {
+                    listOf(telephonyManager.callStateForSubscription)
+                } else {
+                    subscriptionIds.map { telephonyManager.createForSubscriptionId(it).callStateForSubscription }
+                }
+            when {
+                TelephonyManager.CALL_STATE_RINGING in states -> TelephonyManager.CALL_STATE_RINGING
+                TelephonyManager.CALL_STATE_OFFHOOK in states -> TelephonyManager.CALL_STATE_OFFHOOK
+                else -> TelephonyManager.CALL_STATE_IDLE
+            }
         } catch (_: SecurityException) {
-            false
+            TelephonyManager.CALL_STATE_IDLE
         }
+    }
 
     private fun isCallUiActive(): Boolean = isInCall() || isPhoneRinging()
 
@@ -4033,11 +4049,13 @@ class ActionService : AccessibilityService() {
     }
 
     private fun handleIncomingRinging() {
-        if (!isInCall()) {
-            Log.i(TAG, "Ringing without a managed call (self-managed VoIP); leaving LightOS call screen closed")
+        val deviceLocked = keyguardManager.isDeviceLocked
+        if (!isPhoneRinging()) {
+            Log.i(TAG, "Ringing without a cellular call (self-managed VoIP); leaving LightOS call screen closed")
             return
         }
-        if (keyguardManager.isDeviceLocked) {
+        Log.i(TAG, "Cellular call ringing, locked=$deviceLocked; ${if (deviceLocked) "keeping lock mask" else "opening LightOS call screen"}")
+        if (deviceLocked) {
             refreshLockedCallOverlay()
             return
         }

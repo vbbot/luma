@@ -143,7 +143,7 @@ class VolumeController(
         }
 
         val maxRingVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_RING).coerceAtLeast(1)
-        when (SilentModeManager.effectiveRingerMode(context)) {
+        when (audioManager.ringerMode) {
             AudioManager.RINGER_MODE_VIBRATE -> {
                 return VolumeState(
                     type = VolumeStateType.Vibrate,
@@ -309,7 +309,7 @@ class VolumeController(
         }
 
         return try {
-            SilentModeManager.setRingerMode(context, mode)
+            audioManager.ringerMode = mode
             true
         } catch (_: SecurityException) {
             if (promptForPolicyAccess) {

@@ -29,7 +29,6 @@
     <string name="settings_miscellaneous">General</string>
     <string name="settings_colour_apps">Colour Filter</string>
     <string name="settings_hide_persistent_notifications">Hide Persistent Notifications</string>
-    <string name="settings_silent_without_dnd">Silent Without Do Not Disturb</string>
     <string name="settings_density_apps">Display Size</string>
     <string name="density_default">Default</string>
     <string name="density_width_dp">%1$d dp wide</string>

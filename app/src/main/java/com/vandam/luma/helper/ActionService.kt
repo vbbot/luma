@@ -232,7 +232,6 @@ class ActionService : AccessibilityService() {
         syncLockscreenMessageObserver()
         startIncomingCallMonitor()
         DaltonizerManager.recoverFromProcessDeath(this)
-        SilentModeManager.recoverOnStart(this)
         DensityManager.recoverFromProcessDeath(this)
     }
 
@@ -1197,16 +1196,16 @@ class ActionService : AccessibilityService() {
                 val maxRingVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_RING).coerceAtLeast(1)
                 val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_RING)
 
-                when (SilentModeManager.effectiveRingerMode(this@ActionService)) {
+                when (audioManager.ringerMode) {
                     AudioManager.RINGER_MODE_VIBRATE -> {
                         if (isVolumeUp) {
-                            SilentModeManager.setRingerMode(this@ActionService, AudioManager.RINGER_MODE_NORMAL)
+                            audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
                             audioManager.setStreamVolume(AudioManager.STREAM_RING, 1, 0)
                             labelRes = R.string.volume_indicator_ringer
                             progress = 1f / maxRingVolume
                         } else {
                             if (notificationManager.isNotificationPolicyAccessGranted) {
-                                SilentModeManager.setRingerMode(this@ActionService, AudioManager.RINGER_MODE_SILENT)
+                                audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
                             }
                             labelRes =
                                 if (notificationManager.isNotificationPolicyAccessGranted) {
@@ -1220,7 +1219,7 @@ class ActionService : AccessibilityService() {
 
                     AudioManager.RINGER_MODE_SILENT -> {
                         if (isVolumeUp) {
-                            SilentModeManager.setRingerMode(this@ActionService, AudioManager.RINGER_MODE_VIBRATE)
+                            audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
                             labelRes = R.string.volume_indicator_vibrate
                         } else {
                             labelRes = R.string.volume_indicator_silent
@@ -1236,7 +1235,7 @@ class ActionService : AccessibilityService() {
                                 if (currentVolume > 1) currentVolume - 1 else 0
                             }
                         if (targetVolume == 0 && !isVolumeUp) {
-                            SilentModeManager.setRingerMode(this@ActionService, AudioManager.RINGER_MODE_VIBRATE)
+                            audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
                             labelRes = R.string.volume_indicator_vibrate
                             progress = 0f
                         } else {
@@ -1273,15 +1272,15 @@ class ActionService : AccessibilityService() {
             val maxRingVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_RING).coerceAtLeast(1)
             val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_RING)
 
-            when (SilentModeManager.effectiveRingerMode(this@ActionService)) {
+            when (audioManager.ringerMode) {
                 AudioManager.RINGER_MODE_VIBRATE -> {
                     if (isVolumeUp) {
-                        SilentModeManager.setRingerMode(this@ActionService, AudioManager.RINGER_MODE_NORMAL)
+                        audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
                         audioManager.setStreamVolume(AudioManager.STREAM_RING, 1, 0)
                         showUnlockGateVolumeIndicator(R.string.volume_indicator_ringer, 1f / maxRingVolume)
                     } else {
                         if (notificationManager.isNotificationPolicyAccessGranted) {
-                            SilentModeManager.setRingerMode(this@ActionService, AudioManager.RINGER_MODE_SILENT)
+                            audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
                             showUnlockGateVolumeIndicator(R.string.volume_indicator_silent, 0f)
                         } else {
                             showUnlockGateVolumeIndicator(R.string.volume_indicator_vibrate, 0f)
@@ -1291,7 +1290,7 @@ class ActionService : AccessibilityService() {
 
                 AudioManager.RINGER_MODE_SILENT -> {
                     if (isVolumeUp) {
-                        SilentModeManager.setRingerMode(this@ActionService, AudioManager.RINGER_MODE_VIBRATE)
+                        audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
                         showUnlockGateVolumeIndicator(R.string.volume_indicator_vibrate, 0f)
                     } else {
                         showUnlockGateVolumeIndicator(R.string.volume_indicator_silent, 0f)
@@ -1310,7 +1309,7 @@ class ActionService : AccessibilityService() {
                             }
                         }
                     if (targetVolume == 0 && !isVolumeUp) {
-                        SilentModeManager.setRingerMode(this@ActionService, AudioManager.RINGER_MODE_VIBRATE)
+                        audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
                         showUnlockGateVolumeIndicator(R.string.volume_indicator_vibrate, 0f)
                     } else {
                         audioManager.setStreamVolume(AudioManager.STREAM_RING, targetVolume, 0)
@@ -2090,7 +2089,6 @@ class ActionService : AccessibilityService() {
                         }
 
                         AudioManager.RINGER_MODE_CHANGED_ACTION -> {
-                            SilentModeManager.onRingerModeChanged(this@ActionService)
                             runOnMainThread {
                                 refreshUnlockGateSoundModeStatus()
                             }
@@ -3753,7 +3751,7 @@ class ActionService : AccessibilityService() {
             BluetoothStatusHelper.IndicatorState.Off, null -> bluetoothIcon.visibility = View.GONE
         }
 
-        val soundModeDrawable = LumaStatusBarUi.soundModeDrawableForRingerMode(SilentModeManager.effectiveRingerMode(this))
+        val soundModeDrawable = LumaStatusBarUi.soundModeDrawableForRingerMode(audioManager.ringerMode)
         if (soundModeDrawable != null) {
             LumaStatusBarUi.showTinted(soundModeIcon, soundModeDrawable, textColor)
         } else {

@@ -85,7 +85,6 @@ private const val HAPTICS_LONG_PRESS_ENABLED = "haptics_long_press_enabled"
 private const val HAPTICS_GESTURE_ACTIONS_ENABLED = "haptics_gesture_actions_enabled"
 private const val HAPTICS_STATUS_BAR_PRESS_ENABLED = "haptics_status_bar_press_enabled"
 private const val HAPTICS_KEYMAPS_ENABLED = "haptics_keymaps_enabled"
-private const val SILENT_WITHOUT_DND = "silent_without_dnd"
 private const val CAMERA_KEY_PRESS_ACTION = "camera_key_press_action"
 private const val CAMERA_KEY_PRESS_APP = "camera_key_press_app"
 private const val CAMERA_KEY_LONG_PRESS_ACTION = "camera_key_long_press_action"
@@ -650,11 +649,6 @@ class Prefs(
     var showNotificationIndicator: Boolean
         get() = prefs.getBoolean(SHOW_NOTIFICATION_INDICATOR, true)
         set(value) = prefs.edit().putBoolean(SHOW_NOTIFICATION_INDICATOR, value).apply()
-
-    /** Keep silent mode from turning on Do Not Disturb (SilentModeManager). */
-    var silentWithoutDnd: Boolean
-        get() = prefs.getBoolean(SILENT_WITHOUT_DND, true)
-        set(value) = prefs.edit().putBoolean(SILENT_WITHOUT_DND, value).apply()
 
     var hidePersistentNotifications: Boolean
         get() = prefs.getBoolean(HIDE_PERSISTENT_NOTIFICATIONS, false)

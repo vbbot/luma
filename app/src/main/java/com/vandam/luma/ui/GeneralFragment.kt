@@ -15,7 +15,6 @@ import com.vandam.luma.R
 import com.vandam.luma.data.Prefs
 import com.vandam.luma.helper.LumaNotificationListener
 import com.vandam.luma.helper.RestartActivity
-import com.vandam.luma.helper.SilentModeManager
 import com.vandam.luma.ui.compose.SimpleTextButton
 import com.vandam.luma.ui.compose.SettingsScreen
 import com.vandam.luma.ui.compose.ToggleTextButton
@@ -24,13 +23,11 @@ class GeneralFragment : Fragment() {
     private val prefs by lazy { Prefs.getInstance(requireContext()) }
     private val invertColoursState = mutableStateOf(false)
     private val hidePersistentNotificationsState = mutableStateOf(false)
-    private val silentWithoutDndState = mutableStateOf(true)
 
     override fun onResume() {
         super.onResume()
         invertColoursState.value = prefs.invertColours
         hidePersistentNotificationsState.value = prefs.hidePersistentNotifications
-        silentWithoutDndState.value = prefs.silentWithoutDnd
     }
 
     override fun onCreateView(
@@ -87,15 +84,6 @@ class GeneralFragment : Fragment() {
                     hidePersistentNotificationsState.value = it
                     prefs.hidePersistentNotifications = it
                     LumaNotificationListener.refresh()
-                },
-            )
-            ToggleTextButton(
-                title = stringResource(R.string.settings_silent_without_dnd),
-                checked = silentWithoutDndState.value,
-                onValueChange = {
-                    silentWithoutDndState.value = it
-                    prefs.silentWithoutDnd = it
-                    SilentModeManager.onSettingChanged(requireContext())
                 },
             )
             SimpleTextButton(stringResource(R.string.settings_colour_apps)) {
